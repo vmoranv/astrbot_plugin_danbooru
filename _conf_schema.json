@@ -1,0 +1,237 @@
+{
+  "api": {
+    "description": "Danbooru API 配置",
+    "type": "object",
+    "items": {
+      "base_url": {
+        "description": "主站 API 地址",
+        "type": "string",
+        "default": "https://danbooru.donmai.us"
+      },
+      "test_url": {
+        "description": "测试站 API 地址",
+        "type": "string",
+        "default": "https://testbooru.donmai.us"
+      },
+      "use_test_server": {
+        "description": "是否使用测试站",
+        "type": "bool",
+        "default": false
+      },
+      "timeout": {
+        "description": "请求超时（秒）",
+        "type": "int",
+        "default": 30
+      },
+      "max_retries": {
+        "description": "最大重试次数",
+        "type": "int",
+        "default": 3
+      },
+      "retry_delay": {
+        "description": "重试间隔（秒）",
+        "type": "float",
+        "default": 1.0
+      },
+      "rate_limit_per_second": {
+        "description": "全局速率限制（每秒请求数）",
+        "type": "int",
+        "default": 10
+      }
+    }
+  },
+  "auth": {
+    "description": "认证配置",
+    "type": "object",
+    "items": {
+      "username": {
+        "description": "用户名",
+        "type": "string",
+        "default": ""
+      },
+      "api_key": {
+        "description": "API Key",
+        "type": "string",
+        "default": ""
+      }
+    }
+  },
+  "cache": {
+    "description": "缓存配置",
+    "type": "object",
+    "items": {
+      "enabled": {
+        "description": "是否启用缓存",
+        "type": "bool",
+        "default": true
+      },
+      "ttl_seconds": {
+        "description": "缓存有效期（秒）",
+        "type": "int",
+        "default": 300
+      },
+      "max_size": {
+        "description": "最大缓存条目数",
+        "type": "int",
+        "default": 1000
+      },
+      "cache_posts": {
+        "description": "缓存帖子",
+        "type": "bool",
+        "default": true
+      },
+      "cache_tags": {
+        "description": "缓存标签",
+        "type": "bool",
+        "default": true
+      },
+      "cache_artists": {
+        "description": "缓存艺术家",
+        "type": "bool",
+        "default": true
+      },
+      "cache_users": {
+        "description": "缓存用户",
+        "type": "bool",
+        "default": true
+      }
+    }
+  },
+  "filter": {
+    "description": "内容过滤配置",
+    "type": "object",
+    "items": {
+      "allowed_ratings": {
+        "description": "允许的分级（勾选）",
+        "type": "object",
+        "items": {
+          "g": {
+            "description": "g (general)：普通/全年龄",
+            "type": "bool",
+            "default": true
+          },
+          "s": {
+            "description": "s (sensitive)：轻度敏感/擦边",
+            "type": "bool",
+            "default": true
+          },
+          "q": {
+            "description": "q (questionable)：可疑、较明显的性内容",
+            "type": "bool",
+            "default": false
+          },
+          "e": {
+            "description": "e (explicit)：明确的成人内容",
+            "type": "bool",
+            "default": false
+          }
+        }
+      },
+      "blocked_tags": {
+        "description": "屏蔽标签",
+        "type": "list",
+        "items": {"type": "string"},
+        "default": []
+      },
+      "required_tags": {
+        "description": "必需标签",
+        "type": "list",
+        "items": {"type": "string"},
+        "default": []
+      },
+      "min_score": {
+        "description": "最低评分（0 表示不限制）",
+        "type": "int",
+        "default": 0
+      },
+      "max_results": {
+        "description": "最大结果数",
+        "type": "int",
+        "default": 20
+      }
+    }
+  },
+  "display": {
+    "description": "显示配置",
+    "type": "object",
+    "items": {
+    "show_preview": {
+      "description": "是否显示预览图",
+      "type": "bool",
+      "default": true
+    },
+    "search_limit": {
+      "description": "帖子搜索默认返回数量（/danbooru posts 与 /danbooru <tag>）",
+      "type": "int",
+      "default": 5
+    },
+    "only_image": {
+      "description": "仅返回图片（不返回文字）",
+      "type": "bool",
+      "default": false
+    },
+      "preview_size": {
+        "description": "预览尺寸（preview=预览图, sample=大图, original=原图）",
+        "type": "string",
+        "default": "preview",
+        "options": ["preview", "sample", "original"]
+      },
+      "show_tags": {
+        "description": "是否显示标签",
+        "type": "bool",
+        "default": true
+      },
+      "max_tags_display": {
+        "description": "每行最大显示标签数量（0=自动换行）",
+        "type": "int",
+        "default": 0
+      },
+      "show_source": {
+        "description": "是否显示来源",
+        "type": "bool",
+        "default": true
+      },
+      "show_artist": {
+        "description": "是否显示艺术家",
+        "type": "bool",
+        "default": true
+      },
+      "show_score": {
+        "description": "是否显示评分",
+        "type": "bool",
+        "default": true
+      },
+      "language": {
+        "description": "语言",
+        "type": "string",
+        "default": "zh-CN",
+        "options": ["zh-CN", "en-US", "ja-JP"]
+      }
+    }
+  },
+  "enable_commands": {
+    "description": "启用命令",
+    "type": "bool",
+    "default": true
+  },
+  "enable_llm_tools": {
+    "description": "启用 LLM 工具",
+    "type": "bool",
+    "default": true
+  },
+  "enable_auto_tag": {
+    "description": "启用自动标签",
+    "type": "bool",
+    "default": false
+  },
+  "debug": {
+    "description": "调试模式",
+    "type": "bool",
+    "default": false
+  },
+  "log_api_calls": {
+    "description": "记录 API 调用日志",
+    "type": "bool",
+    "default": false
+  }
+}
