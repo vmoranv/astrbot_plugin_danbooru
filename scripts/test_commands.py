@@ -9,22 +9,30 @@ import argparse
 import asyncio
 import os
 import sys
+from importlib import import_module
+from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
-if ROOT_DIR not in sys.path:
-    sys.path.append(ROOT_DIR)
+ROOT_DIR = Path(__file__).resolve().parents[1]
+PACKAGE_NAME = ROOT_DIR.name
+PARENT_DIR = ROOT_DIR.parent
+if str(PARENT_DIR) not in sys.path:
+    sys.path.append(str(PARENT_DIR))
 from typing import Iterable, List, Optional, Tuple
 
-from core.client import DanbooruClient
-from core.config import PluginConfig
-from events.event_bus import EventBus
-from services.registry import ServiceRegistry
-from commands import HELP_MESSAGES, CommandContext, CommandParser, build_handlers
+DanbooruClient = import_module(f"{PACKAGE_NAME}.core.client").DanbooruClient
+PluginConfig = import_module(f"{PACKAGE_NAME}.core.config").PluginConfig
+EventBus = import_module(f"{PACKAGE_NAME}.events.event_bus").EventBus
+ServiceRegistry = import_module(f"{PACKAGE_NAME}.services.registry").ServiceRegistry
+commands_module = import_module(f"{PACKAGE_NAME}.commands")
+HELP_MESSAGES = commands_module.HELP_MESSAGES
+CommandContext = commands_module.CommandContext
+CommandParser = commands_module.CommandParser
+build_handlers = commands_module.build_handlers
 
 try:
-    from main import DanbooruPlugin
+    DanbooruPlugin = import_module(f"{PACKAGE_NAME}.main").DanbooruPlugin
 except Exception:  # pragma: no cover - optional
     DanbooruPlugin = None
 

@@ -9,7 +9,7 @@ from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
 from ..context import CommandContext
 from ..types import Handler
-from core.http_utils import RequestOptions
+from ...core.http_utils import RequestOptions
 
 
 MESSAGES = {

@@ -3,7 +3,7 @@ Danbooru API Plugin - Autocomplete service
 """
 
 from .base import BaseService
-from core.models import APIResponse
+from ..core.models import APIResponse
 
 
 class AutocompleteService(BaseService):

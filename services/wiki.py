@@ -6,13 +6,13 @@ Wiki页面相关的所有API操作
 from typing import Optional, Dict, Any, List
 
 from .base import VersionedService
-from core.models import (
+from ..core.models import (
     PaginationParams,
     APIResponse,
     WikiPage,
     WikiSearchParams,
 )
-from events.event_types import WikiEvent, WikiEvents
+from ..events.event_types import WikiEvent, WikiEvents
 
 
 class WikiService(VersionedService):

@@ -2,8 +2,8 @@
 Danbooru API Plugin - Users profile operations
 """
 
-from core.models import APIResponse
-from events.event_types import UserEvent, UserEvents
+from ..core.models import APIResponse
+from ..events.event_types import UserEvent, UserEvents
 
 
 class UsersProfileMixin:

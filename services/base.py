@@ -6,9 +6,9 @@ Danbooru API Plugin - 服务基类
 from abc import ABC
 from typing import Optional, Dict, Any, TypeVar
 
-from core.client import DanbooruClient
-from core.models import PaginationParams, APIResponse
-from events.event_bus import EventBus, Event
+from ..core.client import DanbooruClient
+from ..core.models import PaginationParams, APIResponse
+from ..events.event_bus import EventBus, Event
 
 
 T = TypeVar('T')

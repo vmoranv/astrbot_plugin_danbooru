@@ -1,5 +1,13 @@
 # Changelog / 更新日志
 
+## v1.0.4
+- Refactor: remove deprecated register decorator and switch to package-relative imports.
+  重构: 移除废弃的 register 装饰器，改用包内相对导入。
+- Refactor: ConfigManager uses logger and plugin data dir, plus async load/save helpers.
+  重构: ConfigManager 改用 logger 与插件数据目录，并提供异步读写方法。
+- Fix: replace print in event bus and log API errors via astrbot logger.
+  修复: 事件总线使用 logger 记录异常，并通过 logger 输出 API 错误。
+
 ## v1.0.3
 - Feature: proxy configuration for HTTP/HTTPS/SOCKS.
   新增: 代理配置，支持 HTTP/HTTPS/SOCKS。

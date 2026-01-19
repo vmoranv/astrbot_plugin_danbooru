@@ -4,8 +4,8 @@ Danbooru API Plugin - Users core operations
 
 from typing import Optional
 
-from core.models import APIResponse, PaginationParams
-from events.event_types import UserEvent, UserEvents
+from ..core.models import APIResponse, PaginationParams
+from ..events.event_types import UserEvent, UserEvents
 
 
 class UsersCoreMixin:

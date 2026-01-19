@@ -6,12 +6,12 @@ Danbooru API Plugin - Artists 服务
 from typing import Optional, Dict, Any, List
 
 from .base import VersionedService
-from core.models import (
+from ..core.models import (
     PaginationParams,
     APIResponse,
     Artist,
 )
-from events.event_types import ArtistEvent, ArtistEvents
+from ..events.event_types import ArtistEvent, ArtistEvents
 
 
 class ArtistsService(VersionedService):

@@ -4,8 +4,8 @@ Danbooru API Plugin - Posts voting operations
 
 from typing import Optional
 
-from core.models import PaginationParams, APIResponse
-from events.event_types import PostVotedEvent
+from ..core.models import PaginationParams, APIResponse
+from ..events.event_types import PostVotedEvent
 
 
 class PostsVotesMixin:

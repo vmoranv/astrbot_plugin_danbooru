@@ -4,7 +4,7 @@ Danbooru API Plugin - Posts parsing helpers
 
 from typing import Dict, Any, List, Optional
 
-from core.models import Post
+from ..core.models import Post
 
 
 class PostsParseMixin:

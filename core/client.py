@@ -25,8 +25,8 @@ from .exceptions import (
 )
 from .models import APIResponse, RateLimitInfo
 from .http_utils import RequestOptions, RateLimiter, ResponseCache
-from events.event_bus import EventBus
-from events.event_types import APIRequestEvent, APIResponseEvent, ErrorEvent
+from ..events.event_bus import EventBus
+from ..events.event_types import APIRequestEvent, APIResponseEvent, ErrorEvent
 
 
 T = TypeVar('T')

@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 
 from astrbot.api import sp
 
-from events.event_bus import EventBus
+from ..events.event_bus import EventBus
 
 
 class SubscriptionsService:

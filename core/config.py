@@ -6,8 +6,16 @@ Danbooru API Plugin - 配置管理模块
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List
 from pathlib import Path
+import asyncio
 import json
 import os
+
+from astrbot.api import logger
+
+try:
+    from astrbot.api import StarTools
+except ImportError:
+    StarTools = None
 
 
 @dataclass
@@ -392,8 +400,22 @@ class ConfigManager:
     """配置管理器"""
     
     def __init__(self, config_path: Optional[str] = None):
-        self.config_path = config_path
+        self.config_path = self._resolve_path(config_path) if config_path else None
         self._config: Optional[PluginConfig] = None
+
+    def _resolve_path(self, config_path: str) -> str:
+        path = Path(config_path)
+        if path.is_absolute():
+            return str(path)
+        base_dir = None
+        if StarTools:
+            try:
+                base_dir = StarTools.get_data_dir()
+            except Exception as exc:
+                logger.error(f"获取插件数据目录失败: {exc}")
+        if not base_dir:
+            base_dir = Path(__file__).resolve().parent
+        return str(Path(base_dir) / path)
     
     @property
     def config(self) -> PluginConfig:
@@ -402,33 +424,47 @@ class ConfigManager:
             self._config = self.load()
         return self._config
     
-    def load(self) -> PluginConfig:
+    def _load_sync(self) -> PluginConfig:
         """加载配置"""
         if self.config_path and os.path.exists(self.config_path):
             try:
-                with open(self.config_path, 'r', encoding='utf-8') as f:
+                with open(self.config_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 return PluginConfig.from_dict(data)
             except (json.JSONDecodeError, IOError) as e:
-                print(f"加载配置失败: {e}")
-        
+                logger.error(f"加载配置失败: {e}")
+
         return PluginConfig()
+
+    async def load_async(self) -> PluginConfig:
+        """异步加载配置"""
+        return await asyncio.to_thread(self._load_sync)
+
+    def load(self) -> PluginConfig:
+        """加载配置"""
+        return self._load_sync()
     
-    def save(self) -> bool:
+    def _save_sync(self) -> bool:
         """保存配置"""
         if not self.config_path:
             return False
-        
+
         try:
-            # 确保目录存在
             Path(self.config_path).parent.mkdir(parents=True, exist_ok=True)
-            
-            with open(self.config_path, 'w', encoding='utf-8') as f:
+            with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(self.config.to_dict(), f, indent=2, ensure_ascii=False)
             return True
         except IOError as e:
-            print(f"保存配置失败: {e}")
+            logger.error(f"保存配置失败: {e}")
             return False
+
+    async def save_async(self) -> bool:
+        """异步保存配置"""
+        return await asyncio.to_thread(self._save_sync)
+
+    def save(self) -> bool:
+        """保存配置"""
+        return self._save_sync()
     
     def update(self, **kwargs) -> bool:
         """更新配置"""

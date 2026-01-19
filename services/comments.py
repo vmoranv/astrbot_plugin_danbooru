@@ -6,13 +6,13 @@ Danbooru API Plugin - Comments 服务
 from typing import Optional, Dict, Any, List
 
 from .base import SearchableService
-from core.models import (
+from ..core.models import (
     PaginationParams,
     APIResponse,
     Comment,
     CommentSearchParams,
 )
-from events.event_types import CommentEvent, CommentEvents
+from ..events.event_types import CommentEvent, CommentEvents
 
 
 class CommentsService(SearchableService):

@@ -2,7 +2,7 @@
 Danbooru API Plugin - Posts note/translation operations
 """
 
-from core.models import APIResponse
+from ..core.models import APIResponse
 
 
 class PostsNotesMixin:

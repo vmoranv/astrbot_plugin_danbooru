@@ -2,7 +2,7 @@
 Danbooru API Plugin - Users API key operations
 """
 
-from core.models import APIResponse
+from ..core.models import APIResponse
 
 
 class UsersApiKeyMixin:

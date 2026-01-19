@@ -3,7 +3,7 @@ Danbooru API Plugin - DText preview service
 """
 
 from .base import BaseService
-from core.models import APIResponse
+from ..core.models import APIResponse
 
 
 class DtextPreviewService(BaseService):

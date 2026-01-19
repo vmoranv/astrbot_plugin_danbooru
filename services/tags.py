@@ -6,14 +6,14 @@ Danbooru API Plugin - Tags 服务
 from typing import Optional, Dict, Any, List, Union
 
 from .base import SearchableService
-from core.models import (
+from ..core.models import (
     PaginationParams,
     APIResponse,
     Tag,
     TagSearchParams,
     TagCategory,
 )
-from events.event_types import TagSearchedEvent, TagEvent, TagEvents
+from ..events.event_types import TagSearchedEvent, TagEvent, TagEvents
 
 
 class TagsService(SearchableService):

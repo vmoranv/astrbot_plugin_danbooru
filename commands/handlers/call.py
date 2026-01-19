@@ -10,7 +10,7 @@ from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
 from ..context import CommandContext
 from ..types import Handler
-from core.models import APIResponse
+from ...core.models import APIResponse
 
 
 MESSAGES = {

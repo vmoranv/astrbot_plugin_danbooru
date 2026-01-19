@@ -4,7 +4,7 @@ Danbooru API Plugin - Users parsing helpers
 
 from typing import Dict, Any, List, Optional
 
-from core.models import User
+from ..core.models import User
 
 
 class UsersParseMixin:

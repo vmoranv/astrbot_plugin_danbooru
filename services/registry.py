@@ -5,8 +5,8 @@ Danbooru API Plugin - Service registry
 from dataclasses import dataclass, field
 from typing import Any, Dict
 
-from core.client import DanbooruClient
-from events.event_bus import EventBus
+from ..core.client import DanbooruClient
+from ..events.event_bus import EventBus
 from .posts import PostsService
 from .tags import TagsService
 from .artists import ArtistsService

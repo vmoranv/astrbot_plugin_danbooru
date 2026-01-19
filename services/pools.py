@@ -6,12 +6,12 @@ Danbooru API Plugin - Pools 服务
 from typing import Optional, Dict, Any, List
 
 from .base import VersionedService
-from core.models import (
+from ..core.models import (
     PaginationParams,
     APIResponse,
     Pool,
 )
-from events.event_types import PoolEvent, PoolEvents
+from ..events.event_types import PoolEvent, PoolEvents
 
 
 class PoolsService(VersionedService):

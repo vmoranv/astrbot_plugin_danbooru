@@ -4,8 +4,8 @@ Danbooru API Plugin - Posts core operations
 
 from typing import Optional, Dict, Any, Union
 
-from core.models import PaginationParams, APIResponse, Rating
-from events.event_types import (
+from ..core.models import PaginationParams, APIResponse, Rating
+from ..events.event_types import (
     PostSearchedEvent,
     PostFetchedEvent,
     PostEvent,

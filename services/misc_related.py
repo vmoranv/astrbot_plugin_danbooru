@@ -5,7 +5,7 @@ Danbooru API Plugin - Related tags service
 from typing import Optional
 
 from .base import BaseService
-from core.models import APIResponse
+from ..core.models import APIResponse
 
 
 class RelatedTagsService(BaseService):

@@ -3,7 +3,7 @@
 from typing import Optional
 
 from .base import BaseService
-from core.models import APIResponse, PaginationParams
+from ..core.models import APIResponse, PaginationParams
 
 
 class DtextLinksService(BaseService):

@@ -10,24 +10,18 @@ Features:
 - 详细的帮助信息
 """
 
-import os
-import sys
 import asyncio
 from datetime import datetime
-
-# Ensure plugin root is on sys.path for absolute imports like "core.*"
-sys.path.append(os.path.dirname(__file__))
-
 from typing import Optional, Dict, Any
 import traceback
 
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
-from astrbot.api.star import Context, Star, register
+from astrbot.api.star import Context, Star
 from astrbot.api import logger
 
-from core.client import DanbooruClient
-from core.config import PluginConfig
-from core.exceptions import (
+from .core.client import DanbooruClient
+from .core.config import PluginConfig
+from .core.exceptions import (
     DanbooruError,
     AuthenticationError,
     RateLimitError,
@@ -35,10 +29,10 @@ from core.exceptions import (
     ForbiddenError,
     ValidationError,
 )
-from events.event_bus import EventBus
-from services.registry import ServiceRegistry
-from commands import HELP_MESSAGES, CommandContext, CommandParser, build_handlers
-from commands.handlers.posts import (
+from .events.event_bus import EventBus
+from .services.registry import ServiceRegistry
+from .commands import HELP_MESSAGES, CommandContext, CommandParser, build_handlers
+from .commands.handlers.posts import (
     _apply_filters,
     _build_image_chain,
     _build_text_image_chain,
@@ -47,7 +41,6 @@ from commands.handlers.posts import (
 )
 
 
-@register("danbooru", "AstrBot", "Danbooru API 完整封装插件", "1.0.1")
 class DanbooruPlugin(Star):
     """Danbooru API 插件主类"""
 
@@ -118,27 +111,31 @@ class DanbooruPlugin(Star):
 
     async def _handle_error(self, event: AstrMessageEvent, error: Exception):
         """统一错误处理"""
+        detail = getattr(error, "message", str(error))
         if isinstance(error, AuthenticationError):
+            logger.error(f"认证失败: {detail}")
             yield event.plain_result("❌ 认证失败：请检查API密钥配置")
         elif isinstance(error, RateLimitError):
+            logger.warning(f"请求过于频繁: {detail}")
             yield event.plain_result(
                 f"⏳ 请求过于频繁，请稍后再试（{error.retry_after}秒后）"
             )
         elif isinstance(error, NotFoundError):
+            logger.error(f"资源未找到: {detail}")
             yield event.plain_result("❌ 未找到请求的资源")
         elif isinstance(error, ForbiddenError):
+            logger.error(f"权限不足: {detail}")
             yield event.plain_result("🚫 没有权限执行此操作")
         elif isinstance(error, ValidationError):
-            yield event.plain_result(f"❌ 参数错误：{error.message}")
+            logger.error(f"参数错误: {detail}")
+            yield event.plain_result(f"❌ 参数错误：{detail}")
         elif isinstance(error, DanbooruError):
-            yield event.plain_result(f"❌ API错误：{error.message}")
+            logger.error(f"API错误: {detail}")
+            yield event.plain_result(f"❌ API错误：{detail}")
         else:
-            logger.error(f"未知错误: {error}")
+            logger.error(f"未知错误: {detail}")
             logger.error(traceback.format_exc())
-            yield event.plain_result(f"❌ 发生错误：{str(error)}")
-
-    def _finalize_result(self, event: AstrMessageEvent, result):
-        return result
+            yield event.plain_result(f"❌ 发生错误：{detail}")
 
     def _start_subscriptions(self) -> None:
         if not self.config or not self.config.subscriptions.enabled:
@@ -439,7 +436,7 @@ class DanbooruPlugin(Star):
         if handler:
             try:
                 async for result in handler(event, args):
-                    yield self._finalize_result(event, result)
+                    yield result
             except Exception as e:
                 async for result in self._handle_error(event, e):
                     yield result
@@ -449,7 +446,7 @@ class DanbooruPlugin(Star):
             if posts_handler and tag_query:
                 try:
                     async for result in posts_handler(event, tag_query):
-                        yield self._finalize_result(event, result)
+                        yield result
                     return
                 except Exception as e:
                     async for result in self._handle_error(event, e):

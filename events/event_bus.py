@@ -14,6 +14,8 @@ from enum import IntEnum
 import uuid
 from collections import defaultdict
 
+from astrbot.api import logger
+
 
 class EventPriority(IntEnum):
     """事件处理优先级"""
@@ -397,7 +399,7 @@ class EventBus:
                 break
             except Exception as e:
                 # 记录错误但继续运行
-                print(f"事件处理错误: {e}")
+                logger.error(f"事件处理错误: {e}")
     
     # ==================== 工具方法 ====================
     

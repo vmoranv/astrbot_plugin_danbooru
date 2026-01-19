@@ -2,7 +2,7 @@
 Danbooru API Plugin - Users password operations
 """
 
-from core.models import APIResponse
+from ..core.models import APIResponse
 
 
 class UsersPasswordMixin:

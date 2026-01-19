@@ -4,7 +4,7 @@ Danbooru API Plugin - Moderation reports operations
 
 from typing import Optional
 
-from core.models import APIResponse, PaginationParams
+from ..core.models import APIResponse, PaginationParams
 
 
 class ModerationReportsMixin:

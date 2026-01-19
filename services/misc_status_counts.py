@@ -5,7 +5,7 @@ Danbooru API Plugin - Status/Counts/Rate limits services
 from typing import Optional
 
 from .base import BaseService
-from core.models import APIResponse, PaginationParams
+from ..core.models import APIResponse, PaginationParams
 
 
 class StatusService(BaseService):

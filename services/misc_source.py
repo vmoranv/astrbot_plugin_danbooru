@@ -3,7 +3,7 @@ Danbooru API Plugin - Source service
 """
 
 from .base import BaseService
-from core.models import APIResponse
+from ..core.models import APIResponse
 
 
 class SourceService(BaseService):

@@ -2,7 +2,7 @@
 Danbooru API Plugin - Users email operations
 """
 
-from core.models import APIResponse
+from ..core.models import APIResponse
 
 
 class UsersEmailMixin:

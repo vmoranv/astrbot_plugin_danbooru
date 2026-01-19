@@ -6,12 +6,12 @@ Danbooru API Plugin - Notes 服务
 from typing import Optional, Dict, Any, List
 
 from .base import VersionedService
-from core.models import (
+from ..core.models import (
     PaginationParams,
     APIResponse,
     Note,
 )
-from events.event_types import NoteEvent, NoteEvents
+from ..events.event_types import NoteEvent, NoteEvents
 
 
 class NotesService(VersionedService):

@@ -4,7 +4,7 @@ Danbooru API Plugin - Posts related operations
 
 from typing import Optional
 
-from core.models import PaginationParams, APIResponse
+from ..core.models import PaginationParams, APIResponse
 
 
 class PostsRelatedMixin:

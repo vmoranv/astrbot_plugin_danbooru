@@ -4,7 +4,7 @@ Danbooru API Plugin - Posts search helpers
 
 from typing import Optional, Dict, Any
 
-from core.models import PaginationParams, APIResponse, PostSearchParams
+from ..core.models import PaginationParams, APIResponse, PostSearchParams
 
 
 class PostsSearchMixin:

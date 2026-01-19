@@ -6,7 +6,7 @@ Danbooru API Plugin - Forum 服务
 from typing import Optional
 
 from .base import CRUDService
-from core.models import (
+from ..core.models import (
     PaginationParams,
     APIResponse,
 )

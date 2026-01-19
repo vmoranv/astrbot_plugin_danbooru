@@ -6,13 +6,13 @@ Danbooru API Plugin - Favorites 服务
 from typing import Optional, Dict, Any, List
 
 from .base import BaseService
-from core.models import (
+from ..core.models import (
     PaginationParams,
     APIResponse,
     Favorite,
     FavoriteGroup,
 )
-from events.event_types import FavoriteEvent, FavoriteEvents
+from ..events.event_types import FavoriteEvent, FavoriteEvents
 
 
 class FavoritesService(BaseService):
