@@ -1,5 +1,9 @@
 # Changelog / 更新日志
 
+## v1.0.3
+- Feature: proxy configuration for HTTP/HTTPS/SOCKS.
+  新增: 代理配置，支持 HTTP/HTTPS/SOCKS。
+
 ## v1.0.2
 - Feature: subscription dedupe with FIFO queue and configurable rounds.
   新增: 订阅去重采用 FIFO 队列，可配置保留轮数。

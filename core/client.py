@@ -8,6 +8,7 @@ import aiohttp
 import json
 from typing import Optional, Dict, Any, TypeVar
 import time
+from urllib.parse import urlparse
 
 from astrbot.api import logger
 
@@ -60,6 +61,7 @@ class DanbooruClient:
         self.event_bus = event_bus
         
         self._session: Optional[aiohttp.ClientSession] = None
+        self._http_proxy: Optional[str] = None
         self._rate_limiter = RateLimiter(self.config.api.rate_limit_per_second)
         self._cache = ResponseCache(
             max_size=self.config.cache.max_size,
@@ -89,6 +91,21 @@ class DanbooruClient:
                 ttl_dns_cache=300,
                 use_dns_cache=True,
             )
+            self._http_proxy = None
+            proxy_url = self.config.proxy.build_url()
+            if proxy_url:
+                scheme = urlparse(proxy_url).scheme.lower()
+                if scheme.startswith("socks"):
+                    try:
+                        from aiohttp_socks import ProxyConnector
+                    except ImportError:
+                        logger.warning(
+                            "代理协议为 SOCKS，但未安装 aiohttp-socks，将忽略代理设置"
+                        )
+                    else:
+                        connector = ProxyConnector.from_url(proxy_url)
+                else:
+                    self._http_proxy = proxy_url
             self._session = aiohttp.ClientSession(
                 timeout=timeout,
                 connector=connector,
@@ -296,6 +313,7 @@ class DanbooruClient:
                     data=data,
                     json=json_data,
                     headers=headers,
+                    proxy=self._http_proxy,
                 ) as response:
                     self._request_count += 1
                     result = await self._handle_response(response, response_format)

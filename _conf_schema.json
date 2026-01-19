@@ -56,6 +56,43 @@
       }
     }
   },
+  "proxy": {
+    "description": "代理配置",
+    "type": "object",
+    "items": {
+      "enabled": {
+        "description": "是否启用代理",
+        "type": "bool",
+        "default": false
+      },
+      "scheme": {
+        "description": "代理协议",
+        "type": "string",
+        "default": "http",
+        "options": ["http", "https", "socks5", "socks5h", "socks4", "socks4a"]
+      },
+      "host": {
+        "description": "代理地址",
+        "type": "string",
+        "default": ""
+      },
+      "port": {
+        "description": "代理端口",
+        "type": "int",
+        "default": 0
+      },
+      "username": {
+        "description": "代理用户名（可选）",
+        "type": "string",
+        "default": ""
+      },
+      "password": {
+        "description": "代理密码（可选）",
+        "type": "string",
+        "default": ""
+      }
+    }
+  },
   "cache": {
     "description": "缓存配置",
     "type": "object",

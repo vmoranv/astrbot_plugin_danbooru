@@ -37,6 +37,16 @@
 - `auth.username`: 用户名。
 - `auth.api_key`: API Key。
 
+#### proxy
+
+- `proxy.enabled`: 是否启用代理。
+- `proxy.scheme`: 代理协议（`http` / `https` / `socks5` / `socks5h` / `socks4` / `socks4a`）。
+- `proxy.host`: 代理地址。
+- `proxy.port`: 代理端口。
+- `proxy.username`: 代理用户名（可选）。
+- `proxy.password`: 代理密码（可选）。
+- SOCKS 代理需要安装 `aiohttp-socks`，否则会被忽略。
+
 #### cache
 
 - `cache.enabled`: 是否启用缓存。

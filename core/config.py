@@ -40,6 +40,32 @@ class AuthConfig:
 
 
 @dataclass
+class ProxyConfig:
+    """代理配置"""
+    enabled: bool = False
+    scheme: str = "http"
+    host: str = ""
+    port: int = 0
+    username: str = ""
+    password: str = ""
+
+    def build_url(self) -> Optional[str]:
+        """构建代理URL"""
+        if not self.enabled or not self.host or self.port <= 0:
+            return None
+        scheme = (self.scheme or "http").lower()
+        auth = ""
+        if self.username:
+            safe_user = self.username.replace("@", "%40")
+            if self.password:
+                safe_pass = self.password.replace("@", "%40")
+                auth = f"{safe_user}:{safe_pass}@"
+            else:
+                auth = f"{safe_user}@"
+        return f"{scheme}://{auth}{self.host}:{self.port}"
+
+
+@dataclass
 class CacheConfig:
     """缓存配置"""
     enabled: bool = True
@@ -111,6 +137,7 @@ class PluginConfig:
     """插件主配置"""
     api: APIConfig = field(default_factory=APIConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
+    proxy: ProxyConfig = field(default_factory=ProxyConfig)
     cache: CacheConfig = field(default_factory=CacheConfig)
     filter: FilterConfig = field(default_factory=FilterConfig)
     display: DisplayConfig = field(default_factory=DisplayConfig)
@@ -148,7 +175,18 @@ class PluginConfig:
                 username=auth_data.get("username", ""),
                 api_key=auth_data.get("api_key", ""),
             )
-        
+
+        if "proxy" in data:
+            proxy_data = data["proxy"]
+            config.proxy = ProxyConfig(
+                enabled=proxy_data.get("enabled", config.proxy.enabled),
+                scheme=proxy_data.get("scheme", config.proxy.scheme),
+                host=proxy_data.get("host", config.proxy.host),
+                port=proxy_data.get("port", config.proxy.port),
+                username=proxy_data.get("username", config.proxy.username),
+                password=proxy_data.get("password", config.proxy.password),
+            )
+
         if "cache" in data:
             cache_data = data["cache"]
             config.cache = CacheConfig(
@@ -228,6 +266,14 @@ class PluginConfig:
             "auth": {
                 "username": self.auth.username,
                 "api_key": self.auth.api_key,
+            },
+            "proxy": {
+                "enabled": self.proxy.enabled,
+                "scheme": self.proxy.scheme,
+                "host": self.proxy.host,
+                "port": self.proxy.port,
+                "username": self.proxy.username,
+                "password": self.proxy.password,
             },
             "cache": {
                 "enabled": self.cache.enabled,
@@ -309,10 +355,21 @@ class PluginConfig:
         # 验证缓存配置
         if self.cache.ttl_seconds < 0:
             errors.append("cache ttl_seconds不能为负数")
-        
+
         if self.cache.max_size <= 0:
             errors.append("cache max_size必须大于0")
-        
+
+        # 验证代理配置
+        if self.proxy.enabled:
+            scheme = (self.proxy.scheme or "").lower()
+            valid_schemes = {"http", "https", "socks5", "socks5h", "socks4", "socks4a"}
+            if scheme not in valid_schemes:
+                errors.append("proxy.scheme仅支持http/https/socks5/socks5h/socks4/socks4a")
+            if not self.proxy.host:
+                errors.append("proxy.host不能为空")
+            if self.proxy.port <= 0 or self.proxy.port > 65535:
+                errors.append("proxy.port必须在1-65535之间")
+
         return errors
 
     def resolve_batch_limit(
