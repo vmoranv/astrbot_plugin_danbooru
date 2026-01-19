@@ -161,9 +161,9 @@
       "default": true
     },
     "search_limit": {
-      "description": "帖子搜索默认返回数量（/danbooru posts 与 /danbooru <tag>）",
+      "description": "批量结果默认/上限数量（搜索、热门、标签、列表类命令都会受影响）",
       "type": "int",
-      "default": 5
+      "default": 1
     },
     "only_image": {
       "description": "仅返回图片（不返回文字）",
@@ -206,6 +206,22 @@
         "type": "string",
         "default": "zh-CN",
         "options": ["zh-CN", "en-US", "ja-JP"]
+      }
+    }
+  },
+  "subscriptions": {
+    "description": "订阅配置",
+    "type": "object",
+    "items": {
+      "enabled": {
+        "description": "是否启用订阅推送",
+        "type": "bool",
+        "default": true
+      },
+      "send_interval_minutes": {
+        "description": "订阅队列发送/轮询间隔（分钟）",
+        "type": "int",
+        "default": 120
       }
     }
   },

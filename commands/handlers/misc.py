@@ -29,7 +29,12 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
             yield event.plain_result(MESSAGES["missing_query"])
             return
 
-        response = await ctx.services.autocomplete.tag(args.strip(), limit=10)
+        default_limit = 10
+        if ctx.config:
+            limit = ctx.config.resolve_batch_limit(None, default_limit, 50)
+        else:
+            limit = default_limit
+        response = await ctx.services.autocomplete.tag(args.strip(), limit=limit)
         if not response.success:
             yield event.plain_result(MESSAGES["autocomplete_failed"])
             return
@@ -101,8 +106,13 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
             yield event.plain_result(MESSAGES["similar_empty"].format(post_id=post_id))
             return
 
+        default_limit = 10
+        if ctx.config:
+            limit = ctx.config.resolve_batch_limit(None, default_limit, 50)
+        else:
+            limit = default_limit
         result_lines = [f"🔎 与帖子 #{post_id} 相似的图片\n"]
-        for item in results[:10]:
+        for item in results[:limit]:
             if isinstance(item, dict):
                 similar_id = item.get('post_id') or item.get('id', 0)
                 score = item.get('score', 0)

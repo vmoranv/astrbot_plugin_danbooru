@@ -12,6 +12,8 @@ Features:
 
 import os
 import sys
+import asyncio
+from datetime import datetime
 
 # Ensure plugin root is on sys.path for absolute imports like "core.*"
 sys.path.append(os.path.dirname(__file__))
@@ -36,9 +38,16 @@ from core.exceptions import (
 from events.event_bus import EventBus
 from services.registry import ServiceRegistry
 from commands import HELP_MESSAGES, CommandContext, CommandParser, build_handlers
+from commands.handlers.posts import (
+    _apply_filters,
+    _build_image_chain,
+    _build_text_image_chain,
+    _is_image_accessible,
+    _select_image_url,
+)
 
 
-@register("danbooru", "AstrBot", "Danbooru API 完整封装插件", "1.0.0")
+@register("danbooru", "AstrBot", "Danbooru API 完整封装插件", "1.0.1")
 class DanbooruPlugin(Star):
     """Danbooru API 插件主类"""
 
@@ -53,6 +62,9 @@ class DanbooruPlugin(Star):
         self.services: Optional[ServiceRegistry] = None
         self.handlers: Dict[str, Any] = {}
         self.parser = CommandParser()
+        self.command_ctx: Optional[CommandContext] = None
+        self._subscription_tasks: list[asyncio.Task] = []
+        self._subscription_stop: Optional[asyncio.Event] = None
 
     async def initialize(self):
         """插件初始化"""
@@ -77,8 +89,10 @@ class DanbooruPlugin(Star):
                 help_messages=HELP_MESSAGES,
                 parser=self.parser,
             )
+            self.command_ctx = ctx
             self.handlers = build_handlers(ctx)
 
+            self._start_subscriptions()
             logger.info("Danbooru 插件初始化完成")
 
         except Exception as e:
@@ -90,6 +104,7 @@ class DanbooruPlugin(Star):
         logger.info("正在关闭 Danbooru 插件...")
 
         try:
+            await self._stop_subscriptions()
             if self.event_bus:
                 await self.event_bus.stop()
 
@@ -124,6 +139,220 @@ class DanbooruPlugin(Star):
 
     def _finalize_result(self, event: AstrMessageEvent, result):
         return result
+
+    def _start_subscriptions(self) -> None:
+        if not self.config or not self.config.subscriptions.enabled:
+            return
+        if self._subscription_tasks:
+            return
+        self._subscription_stop = asyncio.Event()
+        self._subscription_tasks = [
+            asyncio.create_task(self._run_subscription_cycle()),
+        ]
+
+    async def _stop_subscriptions(self) -> None:
+        if self._subscription_stop:
+            self._subscription_stop.set()
+        for task in self._subscription_tasks:
+            task.cancel()
+        if self._subscription_tasks:
+            await asyncio.gather(*self._subscription_tasks, return_exceptions=True)
+        self._subscription_tasks = []
+        self._subscription_stop = None
+
+    async def _sleep_or_stop(self, seconds: float) -> bool:
+        if not self._subscription_stop:
+            await asyncio.sleep(seconds)
+            return False
+        try:
+            await asyncio.wait_for(self._subscription_stop.wait(), timeout=seconds)
+            return True
+        except asyncio.TimeoutError:
+            return False
+
+    def _get_search_limit(self, fallback: int = 5) -> int:
+        if self.config and self.config.display.search_limit > 0:
+            return self.config.display.search_limit
+        return fallback
+
+    async def _send_chain(self, session: str, chain: MessageEventResult) -> None:
+        try:
+            await self.context.send_message(session, chain)
+        except Exception as exc:
+            logger.error(f"订阅消息发送失败: {exc}")
+
+    async def _dispatch_tag_subscriptions(self) -> None:
+        if not self.services or not self.command_ctx or not self.config:
+            return
+        groups = await self.services.subscriptions.list_groups()
+        limit = min(self._get_search_limit(), 20)
+        only_image = bool(self.config.display.only_image)
+        show_preview = bool(self.config.display.show_preview)
+
+        for group_id, group in groups.items():
+            session = group.get("session_id")
+            if not session:
+                continue
+            tags_map = group.get("tags", {})
+            for tag, meta in tags_map.items():
+                last_id = meta.get("last_post_id") if isinstance(meta, dict) else None
+                query = _apply_filters(self.command_ctx, tag)
+                tokens = query.split() if query else [tag]
+                tokens.append("order:id_desc")
+                if last_id:
+                    tokens.append(f"id:>{last_id}")
+                tag_query = " ".join(tokens)
+
+                response = await self.services.posts.list(tags=tag_query, limit=limit)
+                if not response.success or not response.data:
+                    continue
+
+                posts = response.data
+                max_id = max((post.get("id", 0) for post in posts), default=0)
+
+                if show_preview or only_image:
+                    selected: list[tuple[dict, str]] = []
+                    for post in posts:
+                        url = _select_image_url(self.command_ctx, post)
+                        if not url:
+                            continue
+                        if not await _is_image_accessible(self.command_ctx, url):
+                            continue
+                        selected.append((post, url))
+                        if len(selected) >= limit:
+                            break
+                    if selected:
+                        if only_image:
+                            chain = _build_image_chain([url for _, url in selected])
+                            if chain:
+                                await self._send_chain(session, chain)
+                        else:
+                            for post, url in reversed(selected):
+                                score = post.get("score", 0)
+                                fav = post.get("fav_count", 0)
+                                rating = post.get("rating", "?")
+                                text = (
+                                    f"🔔 订阅更新: {tag}\n"
+                                    f"#{post['id']} | ⭐{score} ❤️{fav} | {rating}\n"
+                                    f"🔗 https://danbooru.donmai.us/posts/{post['id']}"
+                                )
+                                chain = _build_text_image_chain(text, url)
+                                if chain:
+                                    await self._send_chain(session, chain)
+                    if max_id:
+                        await self.services.subscriptions.update_last_post(group_id, tag, int(max_id))
+                else:
+                    for post in reversed(posts[:limit]):
+                        score = post.get("score", 0)
+                        fav = post.get("fav_count", 0)
+                        rating = post.get("rating", "?")
+                        text = (
+                            f"🔔 订阅更新: {tag}\n"
+                            f"#{post['id']} | ⭐{score} ❤️{fav} | {rating}\n"
+                            f"🔗 https://danbooru.donmai.us/posts/{post['id']}"
+                        )
+                        await self._send_chain(session, MessageEventResult().message(text))
+                    if max_id:
+                        await self.services.subscriptions.update_last_post(group_id, tag, int(max_id))
+
+    async def _dispatch_popular_subscriptions(self) -> None:
+        if not self.services or not self.command_ctx or not self.config:
+            return
+        groups = await self.services.subscriptions.list_groups()
+        limit = min(self._get_search_limit(), 20)
+        only_image = bool(self.config.display.only_image)
+        show_preview = bool(self.config.display.show_preview)
+        now_ts = int(datetime.now().timestamp())
+        interval_minutes = max(int(self.config.subscriptions.send_interval_minutes), 1)
+        cooldown_seconds = interval_minutes * 60
+
+        groups_by_scale: dict[str, list[tuple[str, str]]] = {}
+        for group_id, group in groups.items():
+            session = group.get("session_id")
+            popular_cfg = group.get("popular", {})
+            if not session or not popular_cfg or not popular_cfg.get("enabled"):
+                continue
+            last_sent = int(popular_cfg.get("last_sent") or 0)
+            if last_sent and now_ts - last_sent < cooldown_seconds:
+                continue
+            scale = str(popular_cfg.get("scale") or "day").lower()
+            if scale not in {"day", "week", "month"}:
+                scale = "day"
+            groups_by_scale.setdefault(scale, []).append((group_id, session))
+
+        if not groups_by_scale:
+            return
+
+        for scale, entries in groups_by_scale.items():
+            response = await self.services.explore.popular(scale=scale)
+            if not response.success or not response.data:
+                continue
+            posts = response.data
+
+            if show_preview or only_image:
+                selected: list[tuple[dict, str]] = []
+                for post in posts:
+                    url = _select_image_url(self.command_ctx, post)
+                    if not url:
+                        continue
+                    if not await _is_image_accessible(self.command_ctx, url):
+                        continue
+                    selected.append((post, url))
+                    if len(selected) >= limit:
+                        break
+
+                if not selected:
+                    for group_id, _ in entries:
+                        await self.services.subscriptions.update_popular_sent(group_id, now_ts)
+                    continue
+
+                urls = [url for _, url in selected]
+                total = len(selected)
+                for group_id, session in entries:
+                    if only_image:
+                        chain = _build_image_chain(urls)
+                        if chain:
+                            await self._send_chain(session, chain)
+                    else:
+                        for idx, (post, url) in enumerate(selected, 1):
+                            score = post.get("score", 0)
+                            fav = post.get("fav_count", 0)
+                            rating = post.get("rating", "?")
+                            text = (
+                                f"🔥 热门订阅 ({scale}，第{idx}/{total}条)\n"
+                                f"#{post['id']} | ⭐{score} ❤️{fav} | {rating}\n"
+                                f"🔗 https://danbooru.donmai.us/posts/{post['id']}"
+                            )
+                            chain = _build_text_image_chain(text, url)
+                            if chain:
+                                await self._send_chain(session, chain)
+                    await self.services.subscriptions.update_popular_sent(group_id, now_ts)
+            else:
+                result_lines = [f"🔥 热门订阅 ({scale})\n"]
+                for idx, post in enumerate(posts[:limit], 1):
+                    score = post.get("score", 0)
+                    fav = post.get("fav_count", 0)
+                    result_lines.append(f"{idx}. #{post['id']} | ⭐{score} ❤️{fav}")
+
+                text = "\n".join(result_lines)
+                for group_id, session in entries:
+                    await self._send_chain(session, MessageEventResult().message(text))
+                    await self.services.subscriptions.update_popular_sent(group_id, now_ts)
+
+    async def _run_subscription_cycle(self) -> None:
+        while True:
+            if self._subscription_stop and self._subscription_stop.is_set():
+                break
+            try:
+                await self._dispatch_tag_subscriptions()
+                await self._dispatch_popular_subscriptions()
+            except Exception as exc:
+                logger.error(f"标签订阅处理失败: {exc}")
+            interval = 120
+            if self.config:
+                interval = max(int(self.config.subscriptions.send_interval_minutes), 1)
+            if await self._sleep_or_stop(interval * 60):
+                break
 
     @filter.command("danbooru")
     async def cmd_main(self, event: AstrMessageEvent):

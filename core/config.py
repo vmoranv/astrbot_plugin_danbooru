@@ -87,7 +87,7 @@ def _normalize_allowed_ratings(value: Any) -> List[str]:
 class DisplayConfig:
     """显示配置"""
     show_preview: bool = True
-    search_limit: int = 5
+    search_limit: int = 1
     only_image: bool = False
     preview_size: str = "preview"  # preview, sample, original
     show_tags: bool = True
@@ -99,6 +99,13 @@ class DisplayConfig:
 
 
 @dataclass
+class SubscriptionsConfig:
+    """订阅配置"""
+    enabled: bool = True
+    send_interval_minutes: int = 120
+
+
+@dataclass
 class PluginConfig:
     """插件主配置"""
     api: APIConfig = field(default_factory=APIConfig)
@@ -106,6 +113,7 @@ class PluginConfig:
     cache: CacheConfig = field(default_factory=CacheConfig)
     filter: FilterConfig = field(default_factory=FilterConfig)
     display: DisplayConfig = field(default_factory=DisplayConfig)
+    subscriptions: SubscriptionsConfig = field(default_factory=SubscriptionsConfig)
     
     # 功能开关
     enable_commands: bool = True
@@ -178,6 +186,16 @@ class PluginConfig:
                 show_score=display_data.get("show_score", config.display.show_score),
                 language=display_data.get("language", config.display.language),
             )
+
+        if "subscriptions" in data:
+            subs_data = data["subscriptions"]
+            send_interval_minutes = subs_data.get("send_interval_minutes")
+            config.subscriptions = SubscriptionsConfig(
+                enabled=subs_data.get("enabled", config.subscriptions.enabled),
+                send_interval_minutes=send_interval_minutes
+                if send_interval_minutes is not None
+                else config.subscriptions.send_interval_minutes,
+            )
         
         # 功能开关
         config.enable_commands = data.get("enable_commands", config.enable_commands)
@@ -239,6 +257,10 @@ class PluginConfig:
                 "show_score": self.display.show_score,
                 "language": self.display.language,
             },
+            "subscriptions": {
+                "enabled": self.subscriptions.enabled,
+                "send_interval_minutes": self.subscriptions.send_interval_minutes,
+            },
             "enable_commands": self.enable_commands,
             "enable_llm_tools": self.enable_llm_tools,
             "enable_auto_tag": self.enable_auto_tag,
@@ -271,6 +293,12 @@ class PluginConfig:
 
         if self.display.search_limit <= 0 or self.display.search_limit > 20:
             errors.append("display.search_limit必须在1-20之间")
+
+        if self.subscriptions.tag_poll_minutes <= 0:
+            errors.append("subscriptions.tag_poll_minutes必须大于0")
+
+        if self.subscriptions.send_interval_minutes < 0:
+            errors.append("subscriptions.send_interval_minutes不能为负数")
         
         # 验证缓存配置
         if self.cache.ttl_seconds < 0:
@@ -280,6 +308,21 @@ class PluginConfig:
             errors.append("cache max_size必须大于0")
         
         return errors
+
+    def resolve_batch_limit(
+        self,
+        requested: Optional[int],
+        default: int,
+        hard_cap: int,
+    ) -> int:
+        """统一批量命令的 limit 规则。"""
+        limit = requested if requested is not None else default
+        if limit <= 0:
+            limit = default if default > 0 else 1
+        limit = min(limit, hard_cap)
+        if self.display.search_limit > 0:
+            limit = min(limit, self.display.search_limit)
+        return limit
 
 
 class ConfigManager:

@@ -18,6 +18,7 @@ from .handlers import (
     wiki as wiki_handlers,
     comments as comments_handlers,
     misc as misc_handlers,
+    subscriptions as subscriptions_handlers,
     help as help_handlers,
 )
 
@@ -36,6 +37,7 @@ def build_handlers(ctx: CommandContext) -> Dict[str, Handler]:
     handlers.update(wiki_handlers.register(ctx))
     handlers.update(comments_handlers.register(ctx))
     handlers.update(misc_handlers.register(ctx))
+    handlers.update(subscriptions_handlers.register(ctx))
     handlers.update(api_handlers.register(ctx))
     handlers.update(call_handlers.register(ctx))
     return handlers

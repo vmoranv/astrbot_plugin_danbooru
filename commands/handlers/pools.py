@@ -52,7 +52,12 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
     async def cmd_pools(event: AstrMessageEvent, args: str) -> AsyncIterator[MessageEventResult]:
         parsed = ctx.parser.parse_args(args)
         query = " ".join(parsed.positional) if parsed.positional else None
-        limit = min(int(parsed.flags.get("limit", 10)), 30)
+        default_limit = 10
+        requested = int(parsed.flags.get("limit", default_limit))
+        if ctx.config:
+            limit = ctx.config.resolve_batch_limit(requested, default_limit, 30)
+        else:
+            limit = min(requested, 30)
 
         response = await ctx.services.pools.list(name_matches=f"*{query}*" if query else None, limit=limit)
         if not response.success:

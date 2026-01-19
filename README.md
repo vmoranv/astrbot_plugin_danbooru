@@ -63,6 +63,7 @@
 #### display
 
 - `display.show_preview`: 是否附带预览图（文字+图片合并一条消息）。
+- `display.search_limit`: 批量结果默认/上限数量（搜索、热门、标签、列表类命令都会受影响，默认 1）。
 - `display.only_image`: 仅返回图片，不返回文字。
 - `display.preview_size`: 图片尺寸选择（下拉可选 `preview` / `sample` / `original`）。
 - `display.show_tags`: 是否显示标签。
@@ -71,6 +72,11 @@
 - `display.show_artist`: 是否显示艺术家。
 - `display.show_score`: 是否显示评分。
 - `display.language`: 语言（下拉可选 `zh-CN` / `en-US` / `ja-JP`）。
+
+#### subscriptions
+
+- `subscriptions.enabled`: 是否启用订阅推送。
+- `subscriptions.send_interval_minutes`: 订阅队列发送/轮询间隔（分钟，默认 120）。
 
 #### 其他开关
 
@@ -125,6 +131,17 @@
 - `/danbooru status` 系统状态
 - `/danbooru similar <post_id>` 相似图搜索
 
+### 订阅（群聊）
+
+- `/danbooru subscribe <tag>` 订阅标签更新
+- `/danbooru subscribe popular [--scale day|week|month]` 订阅热门
+- `/danbooru unsubscribe <tag>` 取消订阅
+- `/danbooru subscriptions` 查看订阅列表
+
+订阅仅在群聊中生效，推送内容遵循 `display` 与 `filter` 配置。
+热门订阅支持 `--scale day|week|month`（默认 day）。
+订阅数据使用 AstrBot 的 SharedPreferences 存储（与核心一致）。
+
 ### 原始 API 与微服务入口
 
 - `/danbooru api <METHOD> <endpoint> [key=value ...] [--json '{...}']`
@@ -139,6 +156,7 @@
 - 当 `display.only_image=true` 时，搜索、随机和详情命令只返回图片，不返回文字描述。
 - `preview_size` 控制发送的图片尺寸（优先匹配预览/样本/原图 URL）。
 - `enable_auto_tag` 启用后，搜索/随机命令会批量规范化标签（autocomplete + tag alias）。
+- `display.search_limit` 会限制所有批量输出的数量（搜索、热门、标签、列表类命令）。
 
 ## 🧪 测试
 

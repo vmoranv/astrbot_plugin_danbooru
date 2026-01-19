@@ -56,7 +56,12 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
 
         query = parsed.positional[0]
         category = parsed.flags.get("category")
-        limit = min(int(parsed.flags.get("limit", 10)), 50)
+        default_limit = 10
+        requested = int(parsed.flags.get("limit", default_limit))
+        if ctx.config:
+            limit = ctx.config.resolve_batch_limit(requested, default_limit, 50)
+        else:
+            limit = min(requested, 50)
 
         cat_int = int(category) if category else None
         response = await ctx.services.tags.list(name_matches=query, category=cat_int, limit=limit)
@@ -94,7 +99,10 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
             return
 
         result_lines = [f"🔗 相关标签: {args}\n"]
-        related = data.get('related_tags', [])[:15]
+        limit = 15
+        if ctx.config:
+            limit = ctx.config.resolve_batch_limit(None, limit, 50)
+        related = data.get('related_tags', [])[:limit]
         for item in related:
             if isinstance(item, dict):
                 result_lines.append(f"- {item.get('tag', {}).get('name', 'unknown')}")

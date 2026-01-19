@@ -52,6 +52,12 @@ HELP_MESSAGES = {
 `/danbooru api <method> <endpoint> ...` - 原始API调用（全量覆盖）
 `/danbooru call <service> <method> ...` - 调用服务方法（微服务入口）
 
+📌 订阅（群聊）
+`/danbooru subscribe <tag>` - 订阅标签更新
+`/danbooru subscribe popular [--scale day|week|month]` - 订阅热门
+`/danbooru unsubscribe <tag>` - 取消订阅
+`/danbooru subscriptions` - 查看订阅
+
 📖 使用 `/danbooru help <命令>` 获取详细帮助
 """,
     "post": """📸 帖子命令帮助
@@ -68,7 +74,7 @@ HELP_MESSAGES = {
 参数:
 - `tags`: 搜索标签（空格分隔）
 - `--page N`: 页码（默认1）
-- `--limit N`: 每页数量（默认5，最大20）
+- `--limit N`: 每页数量（默认 display.search_limit，最大20）
 - 如果只传数字，会按 `id` 搜索
 
 示例:
@@ -136,6 +142,25 @@ HELP_MESSAGES = {
 
 示例:
 `/danbooru wiki touhou` - 获取东方Wiki页面
+""",
+    "subscribe": """📌 订阅帮助
+
+`/danbooru subscribe <tag>` - 订阅指定标签的新帖推送
+`/danbooru subscribe popular [--scale day|week|month]` - 订阅热门推送
+
+说明:
+- 仅群聊可用
+- scale 默认 day
+- 订阅后只推送新内容
+""",
+    "unsubscribe": """📌 取消订阅帮助
+
+`/danbooru unsubscribe <tag>` - 取消指定标签订阅
+`/danbooru unsubscribe popular` - 取消热门订阅
+""",
+    "subscriptions": """📌 订阅列表帮助
+
+`/danbooru subscriptions` - 查看当前群聊订阅
 """,
     "api": """🧰 原始API调用帮助
 

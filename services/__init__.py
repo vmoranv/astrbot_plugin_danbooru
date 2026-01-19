@@ -33,6 +33,7 @@ from .misc import (
     DtextLinksService,
     RecommendedPostsService,
 )
+from .subscriptions import SubscriptionsService
 
 __all__ = [
     # Base
@@ -69,4 +70,5 @@ __all__ = [
     "DtextPreviewService",
     "DtextLinksService",
     "RecommendedPostsService",
+    "SubscriptionsService",
 ]

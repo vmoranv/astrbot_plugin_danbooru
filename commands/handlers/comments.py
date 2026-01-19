@@ -30,7 +30,12 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
             yield event.plain_result(MESSAGES["invalid_post_id"])
             return
 
-        response = await ctx.services.comments.list(post_id=post_id, limit=10)
+        default_limit = 10
+        if ctx.config:
+            limit = ctx.config.resolve_batch_limit(None, default_limit, 50)
+        else:
+            limit = default_limit
+        response = await ctx.services.comments.list(post_id=post_id, limit=limit)
         if not response.success:
             yield event.plain_result(MESSAGES["comments_failed"])
             return

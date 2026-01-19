@@ -56,7 +56,12 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
             return
 
         query = parsed.positional[0]
-        limit = min(int(parsed.flags.get("limit", 10)), 30)
+        default_limit = 10
+        requested = int(parsed.flags.get("limit", default_limit))
+        if ctx.config:
+            limit = ctx.config.resolve_batch_limit(requested, default_limit, 30)
+        else:
+            limit = min(requested, 30)
 
         response = await ctx.services.artists.list(name_matches=f"*{query}*", limit=limit)
         if not response.success:

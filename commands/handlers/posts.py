@@ -232,11 +232,11 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
             tags = _apply_filters(ctx, raw_tags)
         page = int(parsed.flags.get("page", 1))
         default_limit = 5
+        requested = int(parsed.flags.get("limit", default_limit))
         if ctx.config:
-            default_limit = ctx.config.display.search_limit or default_limit
-        if default_limit <= 0:
-            default_limit = 5
-        limit = min(int(parsed.flags.get("limit", default_limit)), 20)
+            limit = ctx.config.resolve_batch_limit(requested, default_limit, 20)
+        else:
+            limit = min(requested, 20)
         limit = _apply_limit(ctx, limit)
 
         response = await ctx.services.posts.list(tags=tags, page=page, limit=limit)
@@ -357,11 +357,57 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
         if not posts:
             yield event.plain_result(MESSAGES["popular_empty"])
             return
+        default_limit = 5
+        if ctx.config:
+            limit = ctx.config.resolve_batch_limit(None, default_limit, 20)
+        else:
+            limit = min(default_limit, 20)
+        limit = _apply_limit(ctx, limit)
+
+        if _show_preview(ctx) or _only_image(ctx):
+            selected: List[tuple[dict, str]] = []
+            for post in posts:
+                url = _select_image_url(ctx, post)
+                if not url:
+                    continue
+                if not await _is_image_accessible(ctx, url):
+                    continue
+                selected.append((post, url))
+                if len(selected) >= limit:
+                    break
+
+            if not selected:
+                yield event.plain_result(MESSAGES["popular_empty"])
+                return
+
+            if _only_image(ctx):
+                urls = [url for _, url in selected[:limit]]
+                chain = _build_image_chain(urls)
+                if chain:
+                    yield chain
+                return
+
+            total = len(selected[:limit])
+            for idx, (post, url) in enumerate(selected[:limit], 1):
+                score = post.get("score", 0)
+                fav = post.get("fav_count", 0)
+                rating = post.get("rating", "?")
+                text = (
+                    f"🔥 热门帖子 ({scale}，第{idx}/{total}条)\n"
+                    f"#{post['id']} | ⭐{score} ❤️{fav} | {rating}\n"
+                    f"🔗 https://danbooru.donmai.us/posts/{post['id']}"
+                )
+                chain = _build_text_image_chain(text, url)
+                if chain:
+                    yield chain
+                else:
+                    yield event.plain_result(text)
+            return
 
         result_lines = [f"🔥 热门帖子 ({scale})\n"]
-        for i, post in enumerate(posts[:10], 1):
-            score = post.get('score', 0)
-            fav = post.get('fav_count', 0)
+        for i, post in enumerate(posts[:limit], 1):
+            score = post.get("score", 0)
+            fav = post.get("fav_count", 0)
             result_lines.append(f"{i}. #{post['id']} | ⭐{score} ❤️{fav}")
 
         yield event.plain_result("\n".join(result_lines))

@@ -36,6 +36,7 @@ from .misc import (
     DtextLinksService,
     RecommendedPostsService,
 )
+from .subscriptions import SubscriptionsService
 
 
 @dataclass
@@ -67,6 +68,7 @@ class ServiceRegistry:
     dtext_preview: DtextPreviewService
     dtext_links: DtextLinksService
     recommended_posts: RecommendedPostsService
+    subscriptions: SubscriptionsService
     service_map: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -98,6 +100,7 @@ class ServiceRegistry:
         dtext_preview = DtextPreviewService(client, event_bus)
         dtext_links = DtextLinksService(client, event_bus)
         recommended_posts = RecommendedPostsService(client, event_bus)
+        subscriptions = SubscriptionsService(event_bus)
 
         service_map = {
             "posts": posts,
@@ -127,10 +130,12 @@ class ServiceRegistry:
             "dtext_preview": dtext_preview,
             "dtext_links": dtext_links,
             "recommended_posts": recommended_posts,
+            "subscriptions": subscriptions,
             "news": news_updates,
             "rate": rate_limits,
             "dtext": dtext_preview,
             "recommended": recommended_posts,
+            "subs": subscriptions,
         }
 
         return cls(
@@ -161,5 +166,6 @@ class ServiceRegistry:
             dtext_preview=dtext_preview,
             dtext_links=dtext_links,
             recommended_posts=recommended_posts,
+            subscriptions=subscriptions,
             service_map=service_map,
         )
