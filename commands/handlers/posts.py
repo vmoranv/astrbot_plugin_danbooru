@@ -22,15 +22,43 @@ MESSAGES = {
 }
 
 VALID_RATINGS = ("g", "s", "q", "e")
+VIDEO_EXTS = {"mp4", "webm", "zip", "ugoira"}
+
+
+def _is_video_post(post: dict) -> bool:
+    ext = (post.get("file_ext") or "").lower()
+    return ext in VIDEO_EXTS
+
+
+def _url_has_ext(url: str, exts: set[str]) -> bool:
+    lower = url.lower()
+    return any(lower.endswith(f".{ext}") for ext in exts)
+
+
+def _pick_url(post: dict, keys: Iterable[str], forbid_exts: Optional[set[str]] = None) -> Optional[str]:
+    for key in keys:
+        url = post.get(key)
+        if not url:
+            continue
+        if forbid_exts and _url_has_ext(url, forbid_exts):
+            continue
+        return url
+    return None
 
 
 def _select_image_url(ctx: CommandContext, post: dict) -> Optional[str]:
+    if _is_video_post(post):
+        return _pick_url(
+            post,
+            ("preview_file_url", "large_file_url", "file_url"),
+            forbid_exts=VIDEO_EXTS,
+        )
     size = ctx.config.display.preview_size if ctx.config else "preview"
     if size == "original":
-        return post.get("file_url") or post.get("large_file_url") or post.get("preview_file_url")
+        return _pick_url(post, ("file_url", "large_file_url", "preview_file_url"))
     if size == "sample":
-        return post.get("large_file_url") or post.get("file_url") or post.get("preview_file_url")
-    return post.get("preview_file_url") or post.get("large_file_url") or post.get("file_url")
+        return _pick_url(post, ("large_file_url", "file_url", "preview_file_url"))
+    return _pick_url(post, ("preview_file_url", "large_file_url", "file_url"))
 
 
 def _build_image_chain(urls: Iterable[str]) -> Optional[MessageEventResult]:
@@ -113,6 +141,23 @@ def _format_tags(ctx: CommandContext, tag_string: str) -> str:
     return "\n".join(lines)
 
 
+async def _is_image_accessible(ctx: CommandContext, url: str) -> bool:
+    if not url or not ctx.client:
+        return False
+    headers = {
+        "Range": "bytes=0-0",
+        "User-Agent": "AstrBot-Danbooru-Plugin/1.0",
+    }
+    if ctx.config:
+        headers["Referer"] = ctx.config.api.base_url
+    try:
+        session = await ctx.client._get_session()
+        async with session.get(url, headers=headers) as resp:
+            return resp.status < 400
+    except Exception:
+        return False
+
+
 def _format_search_item(post: dict, page: int, index: int, total: int) -> str:
     score = post.get("score", 0)
     fav = post.get("fav_count", 0)
@@ -151,6 +196,11 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
                 return
         tags_text = _format_tags(ctx, post.get("tag_string", ""))
         tag_line = f"🏷️ 标签: {tags_text}" if tags_text else "🏷️ 标签: (已隐藏)"
+        video_line = ""
+        if _is_video_post(post):
+            video_url = post.get("file_url")
+            if video_url:
+                video_line = f"\n🎞️ 原视频: {video_url}"
         info = f"""📸 帖子 #{post['id']}
 
 ⭐ 分数: {post.get('score', 0)} (⬆️{post.get('up_score', 0)} ⬇️{post.get('down_score', 0)})
@@ -161,14 +211,15 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
 
 {tag_line}
 
-🔗 链接: https://danbooru.donmai.us/posts/{post['id']}
+🔗 链接: https://danbooru.donmai.us/posts/{post['id']}{video_line}
 """
         if _show_preview(ctx):
             url = _select_image_url(ctx, post)
-            chain = _build_text_image_chain(info, url)
-            if chain:
-                yield chain
-                return
+            if url and await _is_image_accessible(ctx, url):
+                chain = _build_text_image_chain(info, url)
+                if chain:
+                    yield chain
+                    return
         yield event.plain_result(info)
 
     async def cmd_posts(event: AstrMessageEvent, args: str) -> AsyncIterator[MessageEventResult]:
@@ -198,18 +249,51 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
             yield event.plain_result(MESSAGES["posts_not_found"])
             return
 
-        if _only_image(ctx):
-            urls = [_select_image_url(ctx, post) for post in posts]
-            chain = _build_image_chain(urls)
-            if chain:
-                yield chain
+        if _show_preview(ctx) or _only_image(ctx):
+            selected: List[tuple[dict, str, int]] = []
+            search_page = page
+            max_pages = 3
+            fetch_limit = min(max(limit * 2, limit), 20)
+
+            for _ in range(max_pages):
+                response = await ctx.services.posts.list(
+                    tags=tags,
+                    page=search_page,
+                    limit=fetch_limit,
+                )
+                if not response.success:
+                    yield event.plain_result(MESSAGES["posts_search_failed"])
+                    return
+                page_posts = response.data or []
+                if not page_posts:
+                    break
+                for post in page_posts:
+                    url = _select_image_url(ctx, post)
+                    if not url:
+                        continue
+                    if not await _is_image_accessible(ctx, url):
+                        continue
+                    selected.append((post, url, search_page))
+                    if len(selected) >= limit:
+                        break
+                if len(selected) >= limit:
+                    break
+                search_page += 1
+
+            if not selected:
+                yield event.plain_result(MESSAGES["posts_not_found"])
                 return
 
-        if _show_preview(ctx):
-            total = len(posts)
-            for idx, post in enumerate(posts, 1):
-                text = _format_search_item(post, page, idx, total)
-                url = _select_image_url(ctx, post)
+            if _only_image(ctx):
+                urls = [url for _, url, _ in selected[:limit]]
+                chain = _build_image_chain(urls)
+                if chain:
+                    yield chain
+                return
+
+            total = len(selected)
+            for idx, (post, url, page_num) in enumerate(selected[:limit], 1):
+                text = _format_search_item(post, page_num, idx, total)
                 chain = _build_text_image_chain(text, url)
                 if chain:
                     yield chain
@@ -252,10 +336,11 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
 """
         if _show_preview(ctx):
             url = _select_image_url(ctx, post)
-            chain = _build_text_image_chain(info, url)
-            if chain:
-                yield chain
-                return
+            if url and await _is_image_accessible(ctx, url):
+                chain = _build_text_image_chain(info, url)
+                if chain:
+                    yield chain
+                    return
         yield event.plain_result(info)
 
     async def cmd_popular(event: AstrMessageEvent, args: str) -> AsyncIterator[MessageEventResult]:

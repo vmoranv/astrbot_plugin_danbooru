@@ -7,6 +7,8 @@ import argparse
 import asyncio
 import os
 import sys
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
 if ROOT_DIR not in sys.path:
@@ -73,16 +75,78 @@ def _format_results(results: Iterable) -> str:
     return "\n\n".join(_format_result_item(item) for item in results)
 
 
+def _guess_ext(url: str) -> str:
+    path = urlparse(url).path
+    _, ext = os.path.splitext(path)
+    if ext and len(ext) <= 6:
+        return ext
+    return ".bin"
+
+
+def _extract_image_urls(results: Iterable) -> List[str]:
+    urls: List[str] = []
+    for item in results:
+        chain = getattr(item, "chain", None)
+        if not isinstance(chain, list):
+            continue
+        for component in chain:
+            url = getattr(component, "file", None) or getattr(component, "url", None)
+            if isinstance(url, str) and url.startswith("http"):
+                urls.append(url)
+    return list(dict.fromkeys(urls))
+
+
+def _download_image(url: str, dest_path: str) -> Optional[str]:
+    try:
+        req = Request(
+            url,
+            headers={
+                "User-Agent": "AstrBot-Danbooru-Tests/1.0",
+                "Referer": "https://danbooru.donmai.us/",
+            },
+        )
+        with urlopen(req, timeout=20) as resp, open(dest_path, "wb") as handle:
+            while True:
+                chunk = resp.read(8192)
+                if not chunk:
+                    break
+                handle.write(chunk)
+        return None
+    except Exception as exc:  # pragma: no cover - network dependent
+        return str(exc)
+
+
+def _save_images(folder: str, index: int, results: Iterable) -> List[Tuple[str, str, Optional[str]]]:
+    urls = _extract_image_urls(results)
+    saved: List[Tuple[str, str, Optional[str]]] = []
+    for i, url in enumerate(urls, 1):
+        ext = _guess_ext(url)
+        filename = f"{index:02d}_img_{i:02d}{ext}"
+        dest = os.path.join(folder, filename)
+        error = _download_image(url, dest)
+        saved.append((url, filename, error))
+    return saved
+
+
 def _write_result(command: str, index: int, args: str, results: Iterable, status: str) -> None:
     folder = os.path.join(RESULTS_ROOT, _sanitize_name(command))
     os.makedirs(folder, exist_ok=True)
     filename = os.path.join(folder, f"{index:02d}.txt")
+    image_records = _save_images(folder, index, results)
     content = (
         f"command: {command}\n"
         f"args: {args}\n"
         f"status: {status}\n\n"
         f"{_format_results(results)}\n"
     )
+    if image_records:
+        lines = ["\nimages:"]
+        for url, name, error in image_records:
+            if error:
+                lines.append(f"- {name} (failed: {error})")
+            else:
+                lines.append(f"- {name} <- {url}")
+        content += "\n".join(lines) + "\n"
     with open(filename, "w", encoding="utf-8") as handle:
         handle.write(content)
 
@@ -145,6 +209,13 @@ async def _collect_samples(services: ServiceRegistry):
     if not user_name:
         user_name = await _pick_first(await services.users.list(limit=1), field="name")
 
+    video_post_id = None
+    for tag in ("filetype:mp4", "filetype:webm", "type:video"):
+        response = await services.posts.list(tags=tag, limit=1)
+        video_post_id = await _pick_first(response, field="id")
+        if video_post_id:
+            break
+
     missing = [
         name
         for name, value in {
@@ -171,6 +242,7 @@ async def _collect_samples(services: ServiceRegistry):
         "user_id": user_id,
         "user_name": user_name,
         "wiki_title": wiki_title,
+        "video_post_id": video_post_id,
     }
 
 
@@ -286,6 +358,30 @@ async def run_tests(args: argparse.Namespace) -> int:
             elif status == "error":
                 failures.append(("cmd_main", samples["tag_name"], _summary(results)))
 
+        if args.golden_post_id and not args.skip_golden:
+            original_use_test = config.api.use_test_server
+            config.api.use_test_server = False
+            try:
+                golden_id = str(args.golden_post_id)
+                try:
+                    results = await _collect(handlers["post"], FakeEvent("/danbooru post"), golden_id)
+                    status = _result_status(results)
+                    _write_result("golden_post", step_index, golden_id, results, status)
+                    step_index += 1
+                    if _extract_image_urls(results):
+                        failures.append(("golden_post", golden_id, "unexpected image access"))
+                except Exception as exc:  # pragma: no cover - network dependent
+                    _write_result(
+                        "golden_post",
+                        step_index,
+                        golden_id,
+                        [f"⚠️ golden check skipped: {exc}"],
+                        "skipped",
+                    )
+                    step_index += 1
+            finally:
+                config.api.use_test_server = original_use_test
+
         if args.only_image:
             post_results = await _collect(handlers["post"], FakeEvent("/danbooru post"), str(samples["post_id"]))
             status = _result_status(post_results)
@@ -293,6 +389,15 @@ async def run_tests(args: argparse.Namespace) -> int:
             step_index += 1
             if not any(_is_message_result(result) for result in post_results):
                 failures.append(("only_image", "post", "not image-only output"))
+
+        if samples.get("video_post_id"):
+            video_id = str(samples["video_post_id"])
+            video_results = await _collect(handlers["post"], FakeEvent("/danbooru post"), video_id)
+            status = _result_status(video_results)
+            _write_result("post_video", step_index, video_id, video_results, status)
+            step_index += 1
+            if not any(_is_message_result(result) for result in video_results):
+                failures.append(("post_video", video_id, "no image preview for video"))
 
         if failures:
             for name, command_args, reason in failures:
@@ -317,6 +422,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--api-key", default=os.getenv("DANBOORU_API_KEY", ""))
     parser.add_argument("--only-image", action="store_true")
     parser.add_argument("--skip-main", action="store_true")
+    parser.add_argument("--golden-post-id", type=int, default=10635968)
+    parser.add_argument("--skip-golden", action="store_true")
     return parser.parse_args()
 
 
