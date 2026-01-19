@@ -78,10 +78,13 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
                     limit = ctx.config.resolve_batch_limit(None, default_limit, 20)
                     show_preview = ctx.config.display.show_preview
                     only_image = ctx.config.display.only_image
+                    dedupe_rounds = max(int(ctx.config.subscriptions.dedupe_rounds), 0)
                 else:
                     limit = default_limit
                     show_preview = True
                     only_image = False
+                    dedupe_rounds = 0
+                current_round = await ctx.services.subscriptions.get_dedupe_round()
 
                 if show_preview or only_image:
                     selected: list[tuple[dict, str]] = []
@@ -95,6 +98,22 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
                         if len(selected) >= limit:
                             break
 
+                    if selected:
+                        post_ids = [post.get("id") for post, _ in selected]
+                        new_ids = await ctx.services.subscriptions.filter_new_post_ids(
+                            group_id,
+                            post_ids,
+                            current_round,
+                            dedupe_rounds,
+                        )
+                        if not new_ids:
+                            selected = []
+                        else:
+                            selected = [
+                                item
+                                for item in selected
+                                if item[0].get("id") in new_ids
+                            ]
                     if selected:
                         if only_image:
                             chain = _build_image_chain([url for _, url in selected])
@@ -117,12 +136,25 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
                     else:
                         yield event.plain_result(MESSAGES["subscribe_popular_ok"])
                 else:
-                    result_lines = [f"🔥 热门订阅 ({scale})\n"]
-                    for idx, post in enumerate(posts[:limit], 1):
-                        score = post.get("score", 0)
-                        fav = post.get("fav_count", 0)
-                        result_lines.append(f"{idx}. #{post['id']} | ⭐{score} ❤️{fav}")
-                    yield event.plain_result("\n".join(result_lines))
+                    post_ids = [post.get("id") for post in posts[:limit]]
+                    new_ids = await ctx.services.subscriptions.filter_new_post_ids(
+                        group_id,
+                        post_ids,
+                        current_round,
+                        dedupe_rounds,
+                    )
+                    filtered_posts = [
+                        post for post in posts[:limit] if post.get("id") in new_ids
+                    ]
+                    if not filtered_posts:
+                        yield event.plain_result(MESSAGES["subscribe_popular_ok"])
+                    else:
+                        result_lines = [f"🔥 热门订阅 ({scale})\n"]
+                        for idx, post in enumerate(filtered_posts, 1):
+                            score = post.get("score", 0)
+                            fav = post.get("fav_count", 0)
+                            result_lines.append(f"{idx}. #{post['id']} | ⭐{score} ❤️{fav}")
+                        yield event.plain_result("\n".join(result_lines))
             else:
                 yield event.plain_result(MESSAGES["subscribe_popular_ok"])
 

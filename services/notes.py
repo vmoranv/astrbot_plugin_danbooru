@@ -276,17 +276,6 @@ class NotesService(VersionedService):
         """获取注释预览"""
         return await self.client.get(f"note_previews/{note_id}")
     
-    async def get_version(self, version_id: int) -> APIResponse:
-        """
-        获取单个版本详情
-        
-        Args:
-            version_id: 版本ID
-        
-        Returns:
-            版本详情响应
-        """
-        return await self.client.get(f"note_versions/{version_id}")
     
     # ==================== 预览 ====================
     

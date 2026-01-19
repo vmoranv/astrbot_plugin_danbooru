@@ -181,13 +181,14 @@ class DanbooruPlugin(Star):
         except Exception as exc:
             logger.error(f"订阅消息发送失败: {exc}")
 
-    async def _dispatch_tag_subscriptions(self) -> None:
+    async def _dispatch_tag_subscriptions(self, round_id: int) -> None:
         if not self.services or not self.command_ctx or not self.config:
             return
         groups = await self.services.subscriptions.list_groups()
         limit = min(self._get_search_limit(), 20)
         only_image = bool(self.config.display.only_image)
         show_preview = bool(self.config.display.show_preview)
+        dedupe_rounds = max(int(self.config.subscriptions.dedupe_rounds), 0)
 
         for group_id, group in groups.items():
             session = group.get("session_id")
@@ -222,6 +223,22 @@ class DanbooruPlugin(Star):
                         if len(selected) >= limit:
                             break
                     if selected:
+                        post_ids = [post.get("id") for post, _ in selected]
+                        new_ids = await self.services.subscriptions.filter_new_post_ids(
+                            group_id,
+                            post_ids,
+                            round_id,
+                            dedupe_rounds,
+                        )
+                        if not new_ids:
+                            selected = []
+                        else:
+                            selected = [
+                                item
+                                for item in selected
+                                if item[0].get("id") in new_ids
+                            ]
+                    if selected:
                         if only_image:
                             chain = _build_image_chain([url for _, url in selected])
                             if chain:
@@ -242,7 +259,17 @@ class DanbooruPlugin(Star):
                     if max_id:
                         await self.services.subscriptions.update_last_post(group_id, tag, int(max_id))
                 else:
-                    for post in reversed(posts[:limit]):
+                    post_ids = [post.get("id") for post in posts[:limit]]
+                    new_ids = await self.services.subscriptions.filter_new_post_ids(
+                        group_id,
+                        post_ids,
+                        round_id,
+                        dedupe_rounds,
+                    )
+                    filtered_posts = [
+                        post for post in posts[:limit] if post.get("id") in new_ids
+                    ]
+                    for post in reversed(filtered_posts):
                         score = post.get("score", 0)
                         fav = post.get("fav_count", 0)
                         rating = post.get("rating", "?")
@@ -255,13 +282,14 @@ class DanbooruPlugin(Star):
                     if max_id:
                         await self.services.subscriptions.update_last_post(group_id, tag, int(max_id))
 
-    async def _dispatch_popular_subscriptions(self) -> None:
+    async def _dispatch_popular_subscriptions(self, round_id: int) -> None:
         if not self.services or not self.command_ctx or not self.config:
             return
         groups = await self.services.subscriptions.list_groups()
         limit = min(self._get_search_limit(), 20)
         only_image = bool(self.config.display.only_image)
         show_preview = bool(self.config.display.show_preview)
+        dedupe_rounds = max(int(self.config.subscriptions.dedupe_rounds), 0)
         now_ts = int(datetime.now().timestamp())
         interval_minutes = max(int(self.config.subscriptions.send_interval_minutes), 1)
         cooldown_seconds = interval_minutes * 60
@@ -306,15 +334,30 @@ class DanbooruPlugin(Star):
                         await self.services.subscriptions.update_popular_sent(group_id, now_ts)
                     continue
 
-                urls = [url for _, url in selected]
-                total = len(selected)
+                selected_ids = [post.get("id") for post, _ in selected]
                 for group_id, session in entries:
+                    new_ids = await self.services.subscriptions.filter_new_post_ids(
+                        group_id,
+                        selected_ids,
+                        round_id,
+                        dedupe_rounds,
+                    )
+                    group_selected = [
+                        item
+                        for item in selected
+                        if item[0].get("id") in new_ids
+                    ]
+                    if not group_selected:
+                        await self.services.subscriptions.update_popular_sent(group_id, now_ts)
+                        continue
+
                     if only_image:
-                        chain = _build_image_chain(urls)
+                        chain = _build_image_chain([url for _, url in group_selected])
                         if chain:
                             await self._send_chain(session, chain)
                     else:
-                        for idx, (post, url) in enumerate(selected, 1):
+                        total = len(group_selected)
+                        for idx, (post, url) in enumerate(group_selected, 1):
                             score = post.get("score", 0)
                             fav = post.get("fav_count", 0)
                             rating = post.get("rating", "?")
@@ -328,14 +371,28 @@ class DanbooruPlugin(Star):
                                 await self._send_chain(session, chain)
                     await self.services.subscriptions.update_popular_sent(group_id, now_ts)
             else:
-                result_lines = [f"🔥 热门订阅 ({scale})\n"]
-                for idx, post in enumerate(posts[:limit], 1):
-                    score = post.get("score", 0)
-                    fav = post.get("fav_count", 0)
-                    result_lines.append(f"{idx}. #{post['id']} | ⭐{score} ❤️{fav}")
-
-                text = "\n".join(result_lines)
                 for group_id, session in entries:
+                    post_ids = [post.get("id") for post in posts[:limit]]
+                    new_ids = await self.services.subscriptions.filter_new_post_ids(
+                        group_id,
+                        post_ids,
+                        round_id,
+                        dedupe_rounds,
+                    )
+                    filtered_posts = [
+                        post for post in posts[:limit] if post.get("id") in new_ids
+                    ]
+                    if not filtered_posts:
+                        await self.services.subscriptions.update_popular_sent(group_id, now_ts)
+                        continue
+
+                    result_lines = [f"🔥 热门订阅 ({scale})\n"]
+                    for idx, post in enumerate(filtered_posts, 1):
+                        score = post.get("score", 0)
+                        fav = post.get("fav_count", 0)
+                        result_lines.append(f"{idx}. #{post['id']} | ⭐{score} ❤️{fav}")
+
+                    text = "\n".join(result_lines)
                     await self._send_chain(session, MessageEventResult().message(text))
                     await self.services.subscriptions.update_popular_sent(group_id, now_ts)
 
@@ -344,8 +401,11 @@ class DanbooruPlugin(Star):
             if self._subscription_stop and self._subscription_stop.is_set():
                 break
             try:
-                await self._dispatch_tag_subscriptions()
-                await self._dispatch_popular_subscriptions()
+                round_id = 0
+                if self.services:
+                    round_id = await self.services.subscriptions.next_dedupe_round()
+                await self._dispatch_tag_subscriptions(round_id)
+                await self._dispatch_popular_subscriptions(round_id)
             except Exception as exc:
                 logger.error(f"标签订阅处理失败: {exc}")
             interval = 120

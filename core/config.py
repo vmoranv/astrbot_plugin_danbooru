@@ -103,6 +103,7 @@ class SubscriptionsConfig:
     """订阅配置"""
     enabled: bool = True
     send_interval_minutes: int = 120
+    dedupe_rounds: int = 3
 
 
 @dataclass
@@ -190,11 +191,15 @@ class PluginConfig:
         if "subscriptions" in data:
             subs_data = data["subscriptions"]
             send_interval_minutes = subs_data.get("send_interval_minutes")
+            dedupe_rounds = subs_data.get("dedupe_rounds")
             config.subscriptions = SubscriptionsConfig(
                 enabled=subs_data.get("enabled", config.subscriptions.enabled),
                 send_interval_minutes=send_interval_minutes
                 if send_interval_minutes is not None
                 else config.subscriptions.send_interval_minutes,
+                dedupe_rounds=dedupe_rounds
+                if dedupe_rounds is not None
+                else config.subscriptions.dedupe_rounds,
             )
         
         # 功能开关
@@ -260,6 +265,7 @@ class PluginConfig:
             "subscriptions": {
                 "enabled": self.subscriptions.enabled,
                 "send_interval_minutes": self.subscriptions.send_interval_minutes,
+                "dedupe_rounds": self.subscriptions.dedupe_rounds,
             },
             "enable_commands": self.enable_commands,
             "enable_llm_tools": self.enable_llm_tools,
@@ -294,11 +300,11 @@ class PluginConfig:
         if self.display.search_limit <= 0 or self.display.search_limit > 20:
             errors.append("display.search_limit必须在1-20之间")
 
-        if self.subscriptions.tag_poll_minutes <= 0:
-            errors.append("subscriptions.tag_poll_minutes必须大于0")
-
         if self.subscriptions.send_interval_minutes < 0:
             errors.append("subscriptions.send_interval_minutes不能为负数")
+
+        if self.subscriptions.dedupe_rounds < 0:
+            errors.append("subscriptions.dedupe_rounds不能为负数")
         
         # 验证缓存配置
         if self.cache.ttl_seconds < 0:

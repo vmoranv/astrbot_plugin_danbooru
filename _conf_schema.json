@@ -222,6 +222,11 @@
         "description": "订阅队列发送/轮询间隔（分钟）",
         "type": "int",
         "default": 120
+      },
+      "dedupe_rounds": {
+        "description": "订阅去重保留轮数（每轮=执行一次订阅队列，FIFO 清理）",
+        "type": "int",
+        "default": 3
       }
     }
   },

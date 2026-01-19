@@ -77,6 +77,7 @@
 
 - `subscriptions.enabled`: 是否启用订阅推送。
 - `subscriptions.send_interval_minutes`: 订阅队列发送/轮询间隔（分钟，默认 120）。
+- `subscriptions.dedupe_rounds`: 订阅去重保留轮数（每轮=执行一次订阅队列，FIFO 清理，默认 3；0 表示关闭去重）。
 
 #### 其他开关
 

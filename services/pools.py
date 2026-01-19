@@ -215,9 +215,6 @@ class PoolsService(VersionedService):
         
         return response
 
-    async def undelete(self, pool_id: int) -> APIResponse:
-        """恢复已删除图池"""
-        return await self.client.post(f"pools/{pool_id}/undelete")
 
     async def create_pool_element(self, pool_id: int, post_id: int) -> APIResponse:
         """创建图池元素"""

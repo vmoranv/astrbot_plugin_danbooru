@@ -91,23 +91,6 @@ class WikiService(VersionedService):
         
         return response
 
-    async def search(
-        self,
-        pagination: Optional[PaginationParams] = None,
-        **kwargs,
-    ) -> APIResponse:
-        """使用 /wiki_pages/search 进行搜索"""
-        params = {}
-        for key, value in kwargs.items():
-            if value is not None:
-                if not key.startswith("search["):
-                    params[f"search[{key}]"] = value
-                else:
-                    params[key] = value
-        return await self.client.get(
-            "wiki_pages/search",
-            params=self._apply_pagination(params, pagination),
-        )
     
     async def get(self, wiki_id: int) -> APIResponse:
         """
@@ -152,9 +135,6 @@ class WikiService(VersionedService):
         
         return response
 
-    async def show_or_new(self, title: str) -> APIResponse:
-        """显示或准备创建 Wiki 页面"""
-        return await self.client.get("wiki_pages/show_or_new", params={"title": title})
     
     async def create(
         self,
@@ -333,17 +313,6 @@ class WikiService(VersionedService):
             params=self._apply_pagination(params, pagination)
         )
     
-    async def get_version(self, version_id: int) -> APIResponse:
-        """
-        获取单个版本详情
-        
-        Args:
-            version_id: 版本ID
-        
-        Returns:
-            版本详情响应
-        """
-        return await self.client.get(f"wiki_page_versions/{version_id}")
     
     async def get_version_diff(
         self,

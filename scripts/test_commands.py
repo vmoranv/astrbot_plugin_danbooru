@@ -3,6 +3,8 @@ Command coverage test for AstrBot Danbooru plugin.
 Runs all registered /danbooru commands against testbooru.
 """
 
+# ruff: noqa: E402
+
 import argparse
 import asyncio
 import os

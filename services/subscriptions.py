@@ -17,6 +17,7 @@ class SubscriptionsService:
     _scope = "plugin"
     _scope_id = "danbooru"
     _key_prefix = "group:"
+    _meta_round_key = "meta:dedupe_round"
 
     def __init__(self, event_bus: EventBus):
         self.event_bus = event_bus
@@ -40,6 +41,7 @@ class SubscriptionsService:
                 "session_id": session_id,
                 "tags": {},
                 "popular": {"enabled": False, "last_sent": 0, "scale": "day"},
+                "sent": {"queue": []},
             }
         if platform:
             group["platform"] = platform
@@ -51,6 +53,10 @@ class SubscriptionsService:
             group["popular"] = {"enabled": False, "last_sent": 0, "scale": "day"}
         if "scale" not in group["popular"]:
             group["popular"]["scale"] = "day"
+        if "sent" not in group:
+            group["sent"] = {"queue": []}
+        if "queue" not in group["sent"]:
+            group["sent"]["queue"] = []
         await sp.put_async(self._scope, self._scope_id, key, group)
         return json.loads(json.dumps(group))
 
@@ -131,3 +137,59 @@ class SubscriptionsService:
             group = await self._ensure_group(group_id)
             group["popular"]["last_sent"] = timestamp
             await sp.put_async(self._scope, self._scope_id, self._key(group_id), group)
+
+    async def get_dedupe_round(self) -> int:
+        async with self._lock:
+            current = await sp.get_async(self._scope, self._scope_id, self._meta_round_key, default=0)
+            return int(current or 0)
+
+    async def next_dedupe_round(self) -> int:
+        async with self._lock:
+            current = await sp.get_async(self._scope, self._scope_id, self._meta_round_key, default=0)
+            next_round = int(current or 0) + 1
+            await sp.put_async(self._scope, self._scope_id, self._meta_round_key, next_round)
+            return next_round
+
+    async def filter_new_post_ids(
+        self,
+        group_id: str,
+        post_ids: list[int],
+        current_round: int,
+        keep_rounds: int,
+    ) -> list[int]:
+        async with self._lock:
+            group = await self._ensure_group(group_id)
+            sent = group.get("sent", {})
+            queue = sent.get("queue", [])
+
+            if keep_rounds <= 0:
+                queue = []
+                sent_set: set[int] = set()
+            else:
+                min_round = max(int(current_round) - int(keep_rounds) + 1, 0)
+                queue = [
+                    item
+                    for item in queue
+                    if int(item.get("round", 0)) >= min_round
+                ]
+                sent_set = {
+                    int(item.get("id", 0))
+                    for item in queue
+                    if item.get("id") is not None
+                }
+
+            new_ids: list[int] = []
+            for post_id in post_ids:
+                if post_id is None:
+                    continue
+                post_id = int(post_id)
+                if post_id in sent_set:
+                    continue
+                sent_set.add(post_id)
+                new_ids.append(post_id)
+                queue.append({"id": post_id, "round": int(current_round)})
+
+            sent["queue"] = queue
+            group["sent"] = sent
+            await sp.put_async(self._scope, self._scope_id, self._key(group_id), group)
+            return new_ids
