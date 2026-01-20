@@ -36,6 +36,7 @@ from .commands.handlers.posts import (
     _apply_filters,
     _build_image_chain,
     _build_text_image_chain,
+    _format_tags,
     _is_image_accessible,
     _select_image_url,
 )
@@ -172,11 +173,13 @@ class DanbooruPlugin(Star):
             return self.config.display.search_limit
         return fallback
 
-    async def _send_chain(self, session: str, chain: MessageEventResult) -> None:
+    async def _send_chain(self, session: str, chain: MessageEventResult) -> bool:
         try:
             await self.context.send_message(session, chain)
+            return True
         except Exception as exc:
             logger.error(f"订阅消息发送失败: {exc}")
+            return False
 
     async def _dispatch_tag_subscriptions(self, round_id: int) -> None:
         if not self.services or not self.command_ctx or not self.config:
@@ -207,6 +210,7 @@ class DanbooruPlugin(Star):
 
                 posts = response.data
                 max_id = max((post.get("id", 0) for post in posts), default=0)
+                sent_ids: list[int] = []
 
                 if show_preview or only_image:
                     selected: list[tuple[dict, str]] = []
@@ -238,21 +242,45 @@ class DanbooruPlugin(Star):
                     if selected:
                         if only_image:
                             chain = _build_image_chain([url for _, url in selected])
-                            if chain:
-                                await self._send_chain(session, chain)
+                            if chain and await self._send_chain(session, chain):
+                                sent_ids.extend(
+                                    [
+                                        int(post.get("id"))
+                                        for post, _ in selected
+                                        if post.get("id") is not None
+                                    ]
+                                )
                         else:
                             for post, url in reversed(selected):
                                 score = post.get("score", 0)
                                 fav = post.get("fav_count", 0)
                                 rating = post.get("rating", "?")
-                                text = (
-                                    f"🔔 订阅更新: {tag}\n"
-                                    f"#{post['id']} | ⭐{score} ❤️{fav} | {rating}\n"
+                                tags_text = _format_tags(
+                                    self.command_ctx,
+                                    post.get("tag_string", ""),
+                                )
+                                lines = [
+                                    f"🔔 订阅更新: {tag}",
+                                    f"#{post['id']} | ⭐{score} ❤️{fav} | {rating}",
+                                ]
+                                if tags_text:
+                                    lines.append(f"🏷️ 标签: {tags_text}")
+                                lines.append(
                                     f"🔗 https://danbooru.donmai.us/posts/{post['id']}"
                                 )
+                                text = "\n".join(lines)
                                 chain = _build_text_image_chain(text, url)
-                                if chain:
-                                    await self._send_chain(session, chain)
+                                if chain and await self._send_chain(session, chain):
+                                    post_id = post.get("id")
+                                    if post_id is not None:
+                                        sent_ids.append(int(post_id))
+                    if sent_ids:
+                        await self.services.subscriptions.mark_sent_post_ids(
+                            group_id,
+                            sent_ids,
+                            round_id,
+                            dedupe_rounds,
+                        )
                     if max_id:
                         await self.services.subscriptions.update_last_post(group_id, tag, int(max_id))
                 else:
@@ -270,12 +298,32 @@ class DanbooruPlugin(Star):
                         score = post.get("score", 0)
                         fav = post.get("fav_count", 0)
                         rating = post.get("rating", "?")
-                        text = (
-                            f"🔔 订阅更新: {tag}\n"
-                            f"#{post['id']} | ⭐{score} ❤️{fav} | {rating}\n"
+                        tags_text = _format_tags(
+                            self.command_ctx,
+                            post.get("tag_string", ""),
+                        )
+                        lines = [
+                            f"🔔 订阅更新: {tag}",
+                            f"#{post['id']} | ⭐{score} ❤️{fav} | {rating}",
+                        ]
+                        if tags_text:
+                            lines.append(f"🏷️ 标签: {tags_text}")
+                        lines.append(
                             f"🔗 https://danbooru.donmai.us/posts/{post['id']}"
                         )
-                        await self._send_chain(session, MessageEventResult().message(text))
+                        text = "\n".join(lines)
+                        chain = MessageEventResult().message(text)
+                        if await self._send_chain(session, chain):
+                            post_id = post.get("id")
+                            if post_id is not None:
+                                sent_ids.append(int(post_id))
+                    if sent_ids:
+                        await self.services.subscriptions.mark_sent_post_ids(
+                            group_id,
+                            sent_ids,
+                            round_id,
+                            dedupe_rounds,
+                        )
                     if max_id:
                         await self.services.subscriptions.update_last_post(group_id, tag, int(max_id))
 
@@ -348,24 +396,49 @@ class DanbooruPlugin(Star):
                         await self.services.subscriptions.update_popular_sent(group_id, now_ts)
                         continue
 
+                    sent_ids: list[int] = []
                     if only_image:
                         chain = _build_image_chain([url for _, url in group_selected])
-                        if chain:
-                            await self._send_chain(session, chain)
+                        if chain and await self._send_chain(session, chain):
+                            sent_ids.extend(
+                                [
+                                    int(post.get("id"))
+                                    for post, _ in group_selected
+                                    if post.get("id") is not None
+                                ]
+                            )
                     else:
                         total = len(group_selected)
                         for idx, (post, url) in enumerate(group_selected, 1):
                             score = post.get("score", 0)
                             fav = post.get("fav_count", 0)
                             rating = post.get("rating", "?")
-                            text = (
-                                f"🔥 热门订阅 ({scale}，第{idx}/{total}条)\n"
-                                f"#{post['id']} | ⭐{score} ❤️{fav} | {rating}\n"
+                            tags_text = _format_tags(
+                                self.command_ctx,
+                                post.get("tag_string", ""),
+                            )
+                            lines = [
+                                f"🔥 热门订阅 ({scale}，第{idx}/{total}条)",
+                                f"#{post['id']} | ⭐{score} ❤️{fav} | {rating}",
+                            ]
+                            if tags_text:
+                                lines.append(f"🏷️ 标签: {tags_text}")
+                            lines.append(
                                 f"🔗 https://danbooru.donmai.us/posts/{post['id']}"
                             )
+                            text = "\n".join(lines)
                             chain = _build_text_image_chain(text, url)
-                            if chain:
-                                await self._send_chain(session, chain)
+                            if chain and await self._send_chain(session, chain):
+                                post_id = post.get("id")
+                                if post_id is not None:
+                                    sent_ids.append(int(post_id))
+                    if sent_ids:
+                        await self.services.subscriptions.mark_sent_post_ids(
+                            group_id,
+                            sent_ids,
+                            round_id,
+                            dedupe_rounds,
+                        )
                     await self.services.subscriptions.update_popular_sent(group_id, now_ts)
             else:
                 for group_id, session in entries:
@@ -390,7 +463,20 @@ class DanbooruPlugin(Star):
                         result_lines.append(f"{idx}. #{post['id']} | ⭐{score} ❤️{fav}")
 
                     text = "\n".join(result_lines)
-                    await self._send_chain(session, MessageEventResult().message(text))
+                    chain = MessageEventResult().message(text)
+                    if await self._send_chain(session, chain):
+                        sent_ids = [
+                            int(post.get("id"))
+                            for post in filtered_posts
+                            if post.get("id") is not None
+                        ]
+                        if sent_ids:
+                            await self.services.subscriptions.mark_sent_post_ids(
+                                group_id,
+                                sent_ids,
+                                round_id,
+                                dedupe_rounds,
+                            )
                     await self.services.subscriptions.update_popular_sent(group_id, now_ts)
 
     async def _run_subscription_cycle(self) -> None:

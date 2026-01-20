@@ -150,6 +150,78 @@ class SubscriptionsService:
             await sp.put_async(self._scope, self._scope_id, self._meta_round_key, next_round)
             return next_round
 
+    def _prune_sent_queue(
+        self,
+        queue: list[dict],
+        current_round: int,
+        keep_rounds: int,
+    ) -> tuple[list[dict], set[int]]:
+        if keep_rounds <= 0:
+            return [], set()
+        min_round = max(int(current_round) - int(keep_rounds) + 1, 0)
+        queue = [
+            item
+            for item in queue
+            if int(item.get("round", 0)) >= min_round
+        ]
+        sent_set = {
+            int(item.get("id", 0))
+            for item in queue
+            if item.get("id") is not None
+        }
+        return queue, sent_set
+
+    async def mark_sent_post_ids(
+        self,
+        group_id: str,
+        post_ids: list[int],
+        current_round: int,
+        keep_rounds: int,
+    ) -> list[int]:
+        async with self._lock:
+            group = await self._ensure_group(group_id)
+            sent = group.get("sent", {})
+            if keep_rounds <= 0:
+                sent["queue"] = []
+                group["sent"] = sent
+                await sp.put_async(self._scope, self._scope_id, self._key(group_id), group)
+                return []
+            queue = sent.get("queue", [])
+            queue, sent_set = self._prune_sent_queue(queue, current_round, keep_rounds)
+
+            added: list[int] = []
+            for post_id in post_ids:
+                if post_id is None:
+                    continue
+                post_id = int(post_id)
+                if post_id in sent_set:
+                    continue
+                sent_set.add(post_id)
+                added.append(post_id)
+                queue.append({"id": post_id, "round": int(current_round)})
+
+            sent["queue"] = queue
+            group["sent"] = sent
+            await sp.put_async(self._scope, self._scope_id, self._key(group_id), group)
+            return added
+
+    async def get_sent_queue(
+        self,
+        group_id: str,
+        current_round: Optional[int] = None,
+        keep_rounds: Optional[int] = None,
+    ) -> list[dict]:
+        async with self._lock:
+            group = await self._ensure_group(group_id)
+            sent = group.get("sent", {})
+            queue = sent.get("queue", [])
+            if current_round is not None and keep_rounds is not None:
+                queue, _ = self._prune_sent_queue(queue, current_round, keep_rounds)
+                sent["queue"] = queue
+                group["sent"] = sent
+                await sp.put_async(self._scope, self._scope_id, self._key(group_id), group)
+            return json.loads(json.dumps(queue))
+
     async def filter_new_post_ids(
         self,
         group_id: str,
@@ -161,22 +233,7 @@ class SubscriptionsService:
             group = await self._ensure_group(group_id)
             sent = group.get("sent", {})
             queue = sent.get("queue", [])
-
-            if keep_rounds <= 0:
-                queue = []
-                sent_set: set[int] = set()
-            else:
-                min_round = max(int(current_round) - int(keep_rounds) + 1, 0)
-                queue = [
-                    item
-                    for item in queue
-                    if int(item.get("round", 0)) >= min_round
-                ]
-                sent_set = {
-                    int(item.get("id", 0))
-                    for item in queue
-                    if item.get("id") is not None
-                }
+            queue, sent_set = self._prune_sent_queue(queue, current_round, keep_rounds)
 
             new_ids: list[int] = []
             for post_id in post_ids:
@@ -185,9 +242,7 @@ class SubscriptionsService:
                 post_id = int(post_id)
                 if post_id in sent_set:
                     continue
-                sent_set.add(post_id)
                 new_ids.append(post_id)
-                queue.append({"id": post_id, "round": int(current_round)})
 
             sent["queue"] = queue
             group["sent"] = sent

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 import asyncio
+import json
 
 
 @dataclass
@@ -104,6 +105,25 @@ class ResponseCache:
             sorted_items = sorted(self._cache.items(), key=lambda x: x[1][1])
             for key, _ in sorted_items[:len(self._cache) - self.max_size + 1]:
                 del self._cache[key]
+
+    def _estimate_entry_size(self, key: str, value: Any) -> int:
+        """估算缓存条目占用大小（字节）"""
+        try:
+            payload = json.dumps(value, ensure_ascii=False)
+        except (TypeError, ValueError):
+            payload = str(value)
+        return len(key.encode("utf-8")) + len(payload.encode("utf-8"))
+
+    async def clear_with_stats(self) -> Dict[str, int]:
+        """清空缓存并返回统计"""
+        async with self._lock:
+            count = len(self._cache)
+            size_bytes = sum(
+                self._estimate_entry_size(key, value)
+                for key, (value, _) in self._cache.items()
+            )
+            self._cache.clear()
+            return {"count": count, "size_bytes": size_bytes}
 
     async def clear(self) -> None:
         """清空缓存"""

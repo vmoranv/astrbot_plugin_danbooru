@@ -49,6 +49,7 @@ HELP_MESSAGES = {
 `/danbooru autocomplete <query>` - 自动补全
 `/danbooru count <tags>` - 帖子计数
 `/danbooru status` - 系统状态
+`/danbooru clearcache` - 清理缓存（不含订阅/去重）
 `/danbooru api <method> <endpoint> ...` - 原始API调用（全量覆盖）
 `/danbooru call <service> <method> ...` - 调用服务方法（微服务入口）
 
@@ -57,6 +58,7 @@ HELP_MESSAGES = {
 `/danbooru subscribe popular [--scale day|week|month]` - 订阅热门
 `/danbooru unsubscribe <tag>` - 取消订阅
 `/danbooru subscriptions` - 查看订阅
+`/danbooru dedupe [--limit N]` - 查看去重表
 
 📖 使用 `/danbooru help <命令>` 获取详细帮助
 """,
@@ -161,6 +163,14 @@ HELP_MESSAGES = {
     "subscriptions": """📌 订阅列表帮助
 
 `/danbooru subscriptions` - 查看当前群聊订阅
+""",
+    "dedupe": """🧾 去重表帮助
+
+`/danbooru dedupe [--limit N]` - 查看去重表（默认 50 条）
+""",
+    "clearcache": """🧹 缓存清理帮助
+
+`/danbooru clearcache` - 清理缓存（不含订阅与去重数据）
 """,
     "api": """🧰 原始API调用帮助
 

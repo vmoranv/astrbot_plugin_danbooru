@@ -3,6 +3,7 @@ Post command handlers.
 """
 
 from typing import Dict, AsyncIterator, Iterable, List, Optional
+import random
 
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
 
@@ -116,6 +117,19 @@ def _apply_limit(ctx: CommandContext, limit: int) -> int:
         max_results = ctx.config.filter.max_results
         if max_results:
             return min(limit, max_results)
+
+
+def _shuffle_posts(posts: Iterable[dict]) -> List[dict]:
+    items = list(posts or [])
+    random.shuffle(items)
+    return items
+
+
+def _pick_random_posts(posts: Iterable[dict], limit: int) -> List[dict]:
+    items = list(posts or [])
+    if limit <= 0 or len(items) <= limit:
+        return items
+    return random.sample(items, k=limit)
     return limit
 
 
@@ -158,14 +172,20 @@ async def _is_image_accessible(ctx: CommandContext, url: str) -> bool:
         return False
 
 
-def _format_search_item(post: dict, page: int, index: int, total: int) -> str:
+def _format_search_item(ctx: CommandContext, post: dict, page: int, index: int, total: int) -> str:
     score = post.get("score", 0)
     fav = post.get("fav_count", 0)
     rating = post.get("rating", "?")
     ext = post.get("file_ext", "?")
+    tag_string = post.get("tag_string", "")
+    tags_text = _format_tags(ctx, tag_string)
+    tag_line = ""
+    if tag_string:
+        tag_line = f"\n🏷️ 标签: {tags_text}" if tags_text else "\n🏷️ 标签: (已隐藏)"
     return (
         f"🔍 搜索结果 (第{page}页，第{index}/{total}条)\n"
-        f"#{post['id']} | ⭐{score} ❤️{fav} | {rating} | {ext}\n"
+        f"#{post['id']} | ⭐{score} ❤️{fav} | {rating} | {ext}"
+        f"{tag_line}\n"
         f"🔗 https://danbooru.donmai.us/posts/{post['id']}"
     )
 
@@ -238,8 +258,13 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
         else:
             limit = min(requested, 20)
         limit = _apply_limit(ctx, limit)
+        pool_limit = min(max(limit * 5, limit), 20)
+        if ctx.config and ctx.config.filter.max_results:
+            pool_limit = min(pool_limit, int(ctx.config.filter.max_results))
+        if pool_limit < limit:
+            pool_limit = limit
 
-        response = await ctx.services.posts.list(tags=tags, page=page, limit=limit)
+        response = await ctx.services.posts.list(tags=tags, page=page, limit=pool_limit)
         if not response.success:
             yield event.plain_result(MESSAGES["posts_search_failed"])
             return
@@ -249,42 +274,47 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
             yield event.plain_result(MESSAGES["posts_not_found"])
             return
 
-        if _show_preview(ctx) or _only_image(ctx):
-            selected: List[tuple[dict, str, int]] = []
-            search_page = page
-            max_pages = 3
-            fetch_limit = min(max(limit * 2, limit), 20)
+        show_preview = _show_preview(ctx)
+        only_image = _only_image(ctx)
 
-            for _ in range(max_pages):
-                response = await ctx.services.posts.list(
-                    tags=tags,
-                    page=search_page,
-                    limit=fetch_limit,
-                )
-                if not response.success:
-                    yield event.plain_result(MESSAGES["posts_search_failed"])
-                    return
-                page_posts = response.data or []
+        if show_preview or only_image:
+            selected: List[tuple[dict, str, int]] = []
+            max_pages = 3
+
+            for page_offset in range(max_pages):
+                page_num = page + page_offset
+                if page_offset == 0:
+                    page_posts = posts or []
+                else:
+                    response = await ctx.services.posts.list(
+                        tags=tags,
+                        page=page_num,
+                        limit=pool_limit,
+                    )
+                    if not response.success:
+                        yield event.plain_result(MESSAGES["posts_search_failed"])
+                        return
+                    page_posts = response.data or []
                 if not page_posts:
                     break
+                page_posts = _shuffle_posts(page_posts)
                 for post in page_posts:
                     url = _select_image_url(ctx, post)
                     if not url:
                         continue
                     if not await _is_image_accessible(ctx, url):
                         continue
-                    selected.append((post, url, search_page))
+                    selected.append((post, url, page_num))
                     if len(selected) >= limit:
                         break
                 if len(selected) >= limit:
                     break
-                search_page += 1
 
             if not selected:
                 yield event.plain_result(MESSAGES["posts_not_found"])
                 return
 
-            if _only_image(ctx):
+            if only_image:
                 urls = [url for _, url, _ in selected[:limit]]
                 chain = _build_image_chain(urls)
                 if chain:
@@ -293,7 +323,7 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
 
             total = len(selected)
             for idx, (post, url, page_num) in enumerate(selected[:limit], 1):
-                text = _format_search_item(post, page_num, idx, total)
+                text = _format_search_item(ctx, post, page_num, idx, total)
                 chain = _build_text_image_chain(text, url)
                 if chain:
                     yield chain
@@ -301,8 +331,11 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
                     yield event.plain_result(text)
             return
 
-        result_lines = [f"🔍 搜索结果 (第{page}页，共{len(posts)}条)\n"]
-        for post in posts:
+        selected_posts = _pick_random_posts(posts, limit)
+        result_lines = [
+            f"🔍 搜索结果 (第{page}页，随机{len(selected_posts)}/{len(posts)}条)\n"
+        ]
+        for post in selected_posts:
             score = post.get('score', 0)
             fav = post.get('fav_count', 0)
             rating = post.get('rating', '?')
@@ -364,9 +397,13 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
             limit = min(default_limit, 20)
         limit = _apply_limit(ctx, limit)
 
-        if _show_preview(ctx) or _only_image(ctx):
+        show_preview = _show_preview(ctx)
+        only_image = _only_image(ctx)
+
+        if show_preview or only_image:
+            candidates = _shuffle_posts(posts)
             selected: List[tuple[dict, str]] = []
-            for post in posts:
+            for post in candidates:
                 url = _select_image_url(ctx, post)
                 if not url:
                     continue
@@ -376,36 +413,46 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
                 if len(selected) >= limit:
                     break
 
-            if not selected:
+            if selected:
+                if only_image:
+                    urls = [url for _, url in selected[:limit]]
+                    chain = _build_image_chain(urls)
+                    if chain:
+                        yield chain
+                    return
+
+                total = len(selected[:limit])
+                for idx, (post, url) in enumerate(selected[:limit], 1):
+                    score = post.get("score", 0)
+                    fav = post.get("fav_count", 0)
+                    rating = post.get("rating", "?")
+                    tags_text = _format_tags(ctx, post.get("tag_string", ""))
+                    lines = [
+                        f"🔥 热门帖子 ({scale}，第{idx}/{total}条)",
+                        f"#{post['id']} | ⭐{score} ❤️{fav} | {rating}",
+                    ]
+                    if tags_text:
+                        lines.append(f"🏷️ 标签: {tags_text}")
+                    lines.append(
+                        f"🔗 https://danbooru.donmai.us/posts/{post['id']}"
+                    )
+                    text = "\n".join(lines)
+                    chain = _build_text_image_chain(text, url)
+                    if chain:
+                        yield chain
+                    else:
+                        yield event.plain_result(text)
+                return
+
+            if only_image:
                 yield event.plain_result(MESSAGES["popular_empty"])
                 return
 
-            if _only_image(ctx):
-                urls = [url for _, url in selected[:limit]]
-                chain = _build_image_chain(urls)
-                if chain:
-                    yield chain
-                return
-
-            total = len(selected[:limit])
-            for idx, (post, url) in enumerate(selected[:limit], 1):
-                score = post.get("score", 0)
-                fav = post.get("fav_count", 0)
-                rating = post.get("rating", "?")
-                text = (
-                    f"🔥 热门帖子 ({scale}，第{idx}/{total}条)\n"
-                    f"#{post['id']} | ⭐{score} ❤️{fav} | {rating}\n"
-                    f"🔗 https://danbooru.donmai.us/posts/{post['id']}"
-                )
-                chain = _build_text_image_chain(text, url)
-                if chain:
-                    yield chain
-                else:
-                    yield event.plain_result(text)
-            return
-
-        result_lines = [f"🔥 热门帖子 ({scale})\n"]
-        for i, post in enumerate(posts[:limit], 1):
+        selected_posts = _pick_random_posts(posts, limit)
+        result_lines = [
+            f"🔥 热门帖子 ({scale}) 随机{len(selected_posts)}/{len(posts)}条\n"
+        ]
+        for i, post in enumerate(selected_posts, 1):
             score = post.get("score", 0)
             fav = post.get("fav_count", 0)
             result_lines.append(f"{i}. #{post['id']} | ⭐{score} ❤️{fav}")

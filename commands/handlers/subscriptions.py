@@ -12,6 +12,7 @@ from .posts import (
     _apply_filters,
     _build_image_chain,
     _build_text_image_chain,
+    _format_tags,
     _is_image_accessible,
     _select_image_url,
 )
@@ -29,6 +30,7 @@ MESSAGES = {
     "unsubscribe_tag_missing": "⚠️ 该标签未订阅: {tag}",
     "invalid_scale": "❌ scale 参数仅支持 day/week/month",
     "no_subscriptions": "ℹ️ 当前群聊暂无订阅",
+    "dedupe_empty": "ℹ️ 去重表为空",
 }
 
 
@@ -85,6 +87,7 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
                     only_image = False
                     dedupe_rounds = 0
                 current_round = await ctx.services.subscriptions.get_dedupe_round()
+                sent_ids: list[int] = []
 
                 if show_preview or only_image:
                     selected: list[tuple[dict, str]] = []
@@ -119,20 +122,39 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
                             chain = _build_image_chain([url for _, url in selected])
                             if chain:
                                 yield chain
+                                sent_ids.extend(
+                                    [
+                                        int(post.get("id"))
+                                        for post, _ in selected
+                                        if post.get("id") is not None
+                                    ]
+                                )
                         else:
                             total = len(selected)
                             for idx, (post, url) in enumerate(selected, 1):
                                 score = post.get("score", 0)
                                 fav = post.get("fav_count", 0)
                                 rating = post.get("rating", "?")
-                                text = (
-                                    f"🔥 热门订阅 ({scale}，第{idx}/{total}条)\n"
-                                    f"#{post['id']} | ⭐{score} ❤️{fav} | {rating}\n"
+                                tags_text = _format_tags(
+                                    ctx,
+                                    post.get("tag_string", ""),
+                                )
+                                lines = [
+                                    f"🔥 热门订阅 ({scale}，第{idx}/{total}条)",
+                                    f"#{post['id']} | ⭐{score} ❤️{fav} | {rating}",
+                                ]
+                                if tags_text:
+                                    lines.append(f"🏷️ 标签: {tags_text}")
+                                lines.append(
                                     f"🔗 https://danbooru.donmai.us/posts/{post['id']}"
                                 )
+                                text = "\n".join(lines)
                                 chain = _build_text_image_chain(text, url)
                                 if chain:
                                     yield chain
+                                    post_id = post.get("id")
+                                    if post_id is not None:
+                                        sent_ids.append(int(post_id))
                     else:
                         yield event.plain_result(MESSAGES["subscribe_popular_ok"])
                 else:
@@ -155,6 +177,21 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
                             fav = post.get("fav_count", 0)
                             result_lines.append(f"{idx}. #{post['id']} | ⭐{score} ❤️{fav}")
                         yield event.plain_result("\n".join(result_lines))
+                        sent_ids.extend(
+                            [
+                                int(post.get("id"))
+                                for post in filtered_posts
+                                if post.get("id") is not None
+                            ]
+                        )
+
+                if sent_ids:
+                    await ctx.services.subscriptions.mark_sent_post_ids(
+                        group_id,
+                        sent_ids,
+                        current_round,
+                        dedupe_rounds,
+                    )
             else:
                 yield event.plain_result(MESSAGES["subscribe_popular_ok"])
 
@@ -253,8 +290,56 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
 
         yield event.plain_result("\n".join(lines))
 
+    async def cmd_dedupe(event: AstrMessageEvent, args: str) -> AsyncIterator[MessageEventResult]:
+        session = _group_session(event)
+        if not session:
+            yield event.plain_result(MESSAGES["group_only"])
+            return
+
+        parsed = ctx.parser.parse_args(args)
+        raw_limit = parsed.flags.get("limit", 50)
+        try:
+            limit = int(raw_limit)
+        except (TypeError, ValueError):
+            limit = 50
+        if limit <= 0:
+            limit = 50
+        limit = min(limit, 200)
+
+        group_id = event.get_group_id()
+        if ctx.config:
+            dedupe_rounds = max(int(ctx.config.subscriptions.dedupe_rounds), 0)
+        else:
+            dedupe_rounds = 0
+        current_round = await ctx.services.subscriptions.get_dedupe_round()
+        queue = await ctx.services.subscriptions.get_sent_queue(
+            group_id,
+            current_round,
+            dedupe_rounds,
+        )
+        if not queue:
+            yield event.plain_result(MESSAGES["dedupe_empty"])
+            return
+
+        total = len(queue)
+        shown = queue[-limit:] if total > limit else queue
+        lines = [
+            f"🧾 去重表 (共{total}条，保留{dedupe_rounds}轮，当前轮{current_round})"
+        ]
+        if total > len(shown):
+            lines.append(f"⚠️ 仅显示最近 {len(shown)} 条")
+        for item in reversed(shown):
+            post_id = item.get("id") if isinstance(item, dict) else None
+            round_id = item.get("round") if isinstance(item, dict) else None
+            if post_id is None:
+                continue
+            lines.append(f"- #{post_id} (round {round_id})")
+
+        yield event.plain_result("\n".join(lines))
+
     return {
         "subscribe": cmd_subscribe,
         "unsubscribe": cmd_unsubscribe,
         "subscriptions": cmd_subscriptions,
+        "dedupe": cmd_dedupe,
     }

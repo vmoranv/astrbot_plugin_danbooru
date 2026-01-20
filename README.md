@@ -140,6 +140,7 @@
 - `/danbooru autocomplete <query>` 自动补全
 - `/danbooru count <tags>` 帖子计数
 - `/danbooru status` 系统状态
+- `/danbooru clearcache` 清理缓存（不含订阅/去重）
 - `/danbooru similar <post_id>` 相似图搜索
 
 ### 订阅（群聊）
@@ -148,6 +149,7 @@
 - `/danbooru subscribe popular [--scale day|week|month]` 订阅热门
 - `/danbooru unsubscribe <tag>` 取消订阅
 - `/danbooru subscriptions` 查看订阅列表
+- `/danbooru dedupe [--limit N]` 查看去重表
 
 订阅仅在群聊中生效，推送内容遵循 `display` 与 `filter` 配置。
 热门订阅支持 `--scale day|week|month`（默认 day）。

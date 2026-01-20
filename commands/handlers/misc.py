@@ -23,6 +23,14 @@ MESSAGES = {
 }
 
 
+def _format_bytes(size_bytes: int) -> str:
+    if size_bytes >= 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.2f} MB"
+    if size_bytes >= 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    return f"{size_bytes} B"
+
+
 def register(ctx: CommandContext) -> Dict[str, Handler]:
     async def cmd_autocomplete(event: AstrMessageEvent, args: str) -> AsyncIterator[MessageEventResult]:
         if not args:
@@ -85,6 +93,15 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
 """
         yield event.plain_result(info)
 
+    async def cmd_clear_cache(event: AstrMessageEvent, args: str) -> AsyncIterator[MessageEventResult]:
+        stats = await ctx.client.clear_cache_with_stats()
+        count = stats.get("count", 0)
+        size_bytes = stats.get("size_bytes", 0)
+        size_text = _format_bytes(int(size_bytes))
+        yield event.plain_result(
+            f"🧹 已清理缓存: {count} 条，约 {size_text}（不含订阅与去重数据）"
+        )
+
     async def cmd_similar(event: AstrMessageEvent, args: str) -> AsyncIterator[MessageEventResult]:
         if not args:
             yield event.plain_result(MESSAGES["missing_post_id"])
@@ -124,5 +141,6 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
         "autocomplete": cmd_autocomplete,
         "count": cmd_count,
         "status": cmd_status,
+        "clearcache": cmd_clear_cache,
         "similar": cmd_similar,
     }

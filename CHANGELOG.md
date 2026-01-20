@@ -1,5 +1,23 @@
 # Changelog / 更新日志
 
+## v1.0.5
+- Fix: dedupe queue only records successfully sent post IDs.
+  修复: 去重队列仅记录成功发送的帖子 ID。
+- Feature: add dedupe table inspection command.
+  新增: 去重表查看命令。
+- Feature: add cache clear command with count and size output.
+  新增: 缓存清理命令，返回清理数量与大小。
+- Improve: popular command falls back to text output when preview images are unavailable.
+  改进: 热门命令在预览图不可用时回退到文本输出。
+- Fix: random posts bypass response cache to avoid repeats.
+  修复: 随机帖子请求绕过缓存，避免重复。
+- Improve: search results can include tags when display.show_tags is enabled.
+  改进: 搜索结果在启用标签显示时输出标签。
+- Improve: search and popular commands randomly sample results from the current page.
+  改进: 搜索与热门命令在当前页随机抽取结果输出。
+- Improve: popular and subscription messages show tags above the link.
+  改进: 热门与订阅消息统一为标签在上、链接在下。
+
 ## v1.0.4
 - Refactor: remove deprecated register decorator and switch to package-relative imports.
   重构: 移除废弃的 register 装饰器，改用包内相对导入。

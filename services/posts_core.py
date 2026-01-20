@@ -55,7 +55,11 @@ class PostsCoreMixin:
         params = {}
         if tags:
             params["tags"] = tags
-        return await self.client.get(f"{self._endpoint_prefix}/random", params=params)
+        return await self.client.get(
+            f"{self._endpoint_prefix}/random",
+            params=params,
+            use_cache=False,
+        )
 
     async def show_seq(self, post_id: int) -> APIResponse:
         """获取帖子序列信息"""
