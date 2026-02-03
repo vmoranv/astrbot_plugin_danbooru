@@ -14,6 +14,7 @@ import asyncio
 from datetime import datetime
 from typing import Optional, Dict, Any
 import traceback
+import random
 
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star
@@ -332,6 +333,7 @@ class DanbooruPlugin(Star):
             return
         groups = await self.services.subscriptions.list_groups()
         limit = min(self._get_search_limit(), 20)
+        candidate_cap = min(max(limit * 5, 20), 50)
         only_image = bool(self.config.display.only_image)
         show_preview = bool(self.config.display.show_preview)
         dedupe_rounds = max(int(self.config.subscriptions.dedupe_rounds), 0)
@@ -371,7 +373,7 @@ class DanbooruPlugin(Star):
                     if not await _is_image_accessible(self.command_ctx, url):
                         continue
                     selected.append((post, url))
-                    if len(selected) >= limit:
+                    if len(selected) >= candidate_cap:
                         break
 
                 if not selected:
@@ -395,6 +397,9 @@ class DanbooruPlugin(Star):
                     if not group_selected:
                         await self.services.subscriptions.update_popular_sent(group_id, now_ts)
                         continue
+                    if len(group_selected) > limit:
+                        random.shuffle(group_selected)
+                        group_selected = group_selected[:limit]
 
                     sent_ids: list[int] = []
                     if only_image:
@@ -442,19 +447,24 @@ class DanbooruPlugin(Star):
                     await self.services.subscriptions.update_popular_sent(group_id, now_ts)
             else:
                 for group_id, session in entries:
-                    post_ids = [post.get("id") for post in posts[:limit]]
+                    candidates = posts[:candidate_cap]
+                    post_ids = [post.get("id") for post in candidates]
                     new_ids = await self.services.subscriptions.filter_new_post_ids(
                         group_id,
                         post_ids,
                         round_id,
                         dedupe_rounds,
                     )
+                    new_id_set = set(new_ids)
                     filtered_posts = [
-                        post for post in posts[:limit] if post.get("id") in new_ids
+                        post for post in candidates if post.get("id") in new_id_set
                     ]
                     if not filtered_posts:
                         await self.services.subscriptions.update_popular_sent(group_id, now_ts)
                         continue
+                    if len(filtered_posts) > limit:
+                        random.shuffle(filtered_posts)
+                        filtered_posts = filtered_posts[:limit]
 
                     result_lines = [f"🔥 热门订阅 ({scale})\n"]
                     for idx, post in enumerate(filtered_posts, 1):

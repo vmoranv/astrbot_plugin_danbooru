@@ -7,6 +7,7 @@ from astrbot.api.event import AstrMessageEvent, MessageEventResult
 from ..context import CommandContext
 from ..types import Handler
 import time
+import random
 
 from .posts import (
     _apply_filters,
@@ -86,6 +87,7 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
                     show_preview = True
                     only_image = False
                     dedupe_rounds = 0
+                candidate_cap = min(max(limit * 5, 20), 50)
                 current_round = await ctx.services.subscriptions.get_dedupe_round()
                 sent_ids: list[int] = []
 
@@ -98,7 +100,7 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
                         if not await _is_image_accessible(ctx, url):
                             continue
                         selected.append((post, url))
-                        if len(selected) >= limit:
+                        if len(selected) >= candidate_cap:
                             break
 
                     if selected:
@@ -117,6 +119,9 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
                                 for item in selected
                                 if item[0].get("id") in new_ids
                             ]
+                    if len(selected) > limit:
+                        random.shuffle(selected)
+                        selected = selected[:limit]
                     if selected:
                         if only_image:
                             chain = _build_image_chain([url for _, url in selected])
@@ -158,19 +163,24 @@ def register(ctx: CommandContext) -> Dict[str, Handler]:
                     else:
                         yield event.plain_result(MESSAGES["subscribe_popular_ok"])
                 else:
-                    post_ids = [post.get("id") for post in posts[:limit]]
+                    candidates = posts[:candidate_cap]
+                    post_ids = [post.get("id") for post in candidates]
                     new_ids = await ctx.services.subscriptions.filter_new_post_ids(
                         group_id,
                         post_ids,
                         current_round,
                         dedupe_rounds,
                     )
+                    new_id_set = set(new_ids)
                     filtered_posts = [
-                        post for post in posts[:limit] if post.get("id") in new_ids
+                        post for post in candidates if post.get("id") in new_id_set
                     ]
                     if not filtered_posts:
                         yield event.plain_result(MESSAGES["subscribe_popular_ok"])
                     else:
+                        if len(filtered_posts) > limit:
+                            random.shuffle(filtered_posts)
+                            filtered_posts = filtered_posts[:limit]
                         result_lines = [f"🔥 热门订阅 ({scale})\n"]
                         for idx, post in enumerate(filtered_posts, 1):
                             score = post.get("score", 0)

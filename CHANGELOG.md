@@ -1,5 +1,9 @@
 # Changelog / 更新日志
 
+## v1.0.6
+- Fix: popular subscription randomly samples from a deduped candidate pool to avoid repeats and empty sends.
+  修复: 热门订阅从候选池去重后随机抽取，避免重复并减少无内容可发的情况。
+
 ## v1.0.5
 - Fix: dedupe queue only records successfully sent post IDs.
   修复: 去重队列仅记录成功发送的帖子 ID。
